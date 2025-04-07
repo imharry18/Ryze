@@ -1,0 +1,45 @@
+#list{
+    display: flex;
+
+}
+#dp{
+    border: 1px dotted black;
+    border-radius: 50%;
+    padding-left: 7px;
+    padding-right: 7px;
+    height: 25px;
+    margin-right: 5px;
+
+}
+#dp img{
+    height: 100%;
+    width: 100%;
+}
+.listItem{
+    padding: 15px;
+    display: flex;
+    background-color: white;
+    width: 100%;
+    box-shadow: 0px 1px 8px -4px black;
+
+
+}
+.listItemRefresh{
+    padding: 15px;
+    gap: 7px;
+    display: flex;
+    background-color: white;
+    width: 100%;
+    box-shadow: 0px 1px 8px -4px black;
+    align-items: center;
+    justify-content: center;
+}
+#buttonAddFriend{
+    height: 40px;
+}
+#username{
+    flex: 2;
+}
+#addFriendButton{
+    height: 10px;
+}
