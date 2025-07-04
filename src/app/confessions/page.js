@@ -1,10 +1,10 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useAuth } from "@/hooks/useAuth";
 import { Loader2, Ghost, Heart, MessageCircle, Share2 } from "lucide-react";
 import Link from "next/link";
 
-// Category Colors (Same as before)
 const CATEGORY_THEMES = {
   "Love": "bg-gradient-to-br from-pink-900/80 to-rose-950 border-pink-500/50 text-pink-200",
   "Dare": "bg-gradient-to-br from-orange-900/80 to-red-950 border-orange-500/50 text-orange-200",
@@ -26,14 +26,13 @@ const ConfessionCard = ({ post }) => {
   const themeClass = CATEGORY_THEMES[post.category] || CATEGORY_THEMES["Other"];
   const badgeClass = CATEGORY_BADGES[post.category] || CATEGORY_BADGES["Other"];
   
-  const date = new Date(post.createdAt);
+  const date = post.createdAt ? new Date(post.createdAt) : new Date();
   const dateStr = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   return (
     <div className="relative w-full mb-6 break-inside-avoid animate-fadeIn">
       <div className={`rounded-2xl border shadow-lg overflow-hidden relative ${themeClass}`}>
-          
           <div className={`absolute top-0 right-0 px-4 py-1 rounded-bl-2xl text-xs font-bold uppercase tracking-wider ${badgeClass}`}>
             {post.category || "Confession"}
           </div>
@@ -68,10 +67,10 @@ const ConfessionCard = ({ post }) => {
             <div className="flex items-center justify-between pt-4 border-t border-white/10">
                 <div className="flex gap-4">
                 <button className="text-white/60 hover:text-white transition flex items-center gap-1.5 text-xs font-medium">
-                    <Heart size={18} /> <span>{post.likes?.length || 0}</span>
+                    <Heart size={18} /> <span>Like</span>
                 </button>
                 <button className="text-white/60 hover:text-white transition flex items-center gap-1.5 text-xs font-medium">
-                    <MessageCircle size={18} /> <span>{post.commentsCount || 0}</span>
+                    <MessageCircle size={18} /> <span>Comment</span>
                 </button>
                 </div>
                 <button className="text-white/60 hover:text-white transition">
@@ -85,25 +84,26 @@ const ConfessionCard = ({ post }) => {
 };
 
 export default function ConfessionsPage() {
+  const { user } = useAuth();
   const [confessions, setConfessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("All");
 
   useEffect(() => {
-    async function fetchConfessions() {
-        try {
-            // New API Call
-            const res = await fetch("/api/posts?postType=confession");
-            const data = await res.json();
-            if (Array.isArray(data)) {
-                setConfessions(data);
-            }
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setLoading(false);
+    const fetchConfessions = async () => {
+      try {
+        const res = await fetch("/api/posts?type=confession");
+        if (res.ok) {
+          const data = await res.json();
+          setConfessions(data.posts || []);
         }
-    }
+      } catch (err) {
+        console.error("Failed to fetch confessions:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
     fetchConfessions();
   }, []);
 
@@ -143,12 +143,12 @@ export default function ConfessionsPage() {
                 </div>
             ) : filteredConfessions.length === 0 ? (
                 <div className="text-center py-20 text-gray-500">
-                    <p>No confessions found.</p>
+                    <p>No confessions found. Be the first to share!</p>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 gap-4">
                     {filteredConfessions.map(post => (
-                        <ConfessionCard key={post._id} post={post} />
+                        <ConfessionCard key={post.id || post._id} post={post} />
                     ))}
                 </div>
             )}
