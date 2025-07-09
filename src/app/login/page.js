@@ -6,23 +6,12 @@ import Image from "next/image";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { loginSchema } from "@/lib/validations/loginSchema";
-
-// Firebase
-import { auth } from "@/lib/firebase";
-import { signInWithEmailAndPassword } from "firebase/auth";
-
-// Next.js Router (must be inside component)
 import { useRouter } from "next/navigation";
-
-// ShadCN Components (Using Capitalized paths to match your file system)
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { Button } from "@/components/ui/Button";
-
-// Icons
 import { Loader2 } from "lucide-react";
 
-// Google Icon (simple SVG)
 const GoogleIcon = () => (
   <svg className="w-5 h-5" viewBox="0 0 48 48">
     <path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"></path>
@@ -32,13 +21,12 @@ const GoogleIcon = () => (
   </svg>
 );
 
-// Background shape
 const BackgroundShape = ({ className }) => (
   <div className={`absolute rounded-full filter blur-[150px] opacity-20 ${className}`} />
 );
 
 export default function LoginPage() {
-  const router = useRouter(); // MUST be inside component
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState({ type: "", text: "" });
 
@@ -52,13 +40,21 @@ export default function LoginPage() {
 
   const { register, handleSubmit, formState: { errors } } = form;
 
-  // FIXED onSubmit (now inside the component)
   async function onSubmit(values) {
     try {
       setIsLoading(true);
       setMessage({ type: "", text: "" });
 
-      await signInWithEmailAndPassword(auth, values.email, values.password);
+      // Call your local API here
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(values),
+      });
+
+      if (!res.ok) {
+        throw new Error("Invalid email or password");
+      }
 
       setMessage({ type: "success", text: "Login successful! Redirecting..." });
 
@@ -67,7 +63,7 @@ export default function LoginPage() {
       }, 1000);
 
     } catch (error) {
-      setMessage({ type: "error", text: "Invalid email or password" });
+      setMessage({ type: "error", text: error.message });
     } finally {
       setIsLoading(false);
     }
@@ -76,14 +72,12 @@ export default function LoginPage() {
   return (
     <div className="relative min-h-screen w-full overflow-hidden bg-black text-white flex items-center justify-center p-4">
       
-      {/* Background */}
       <BackgroundShape className="bg-blue-600 w-96 h-96 top-1/4 left-1/4" />
       <BackgroundShape className="bg-blue-800 w-80 h-80 bottom-1/4 right-1/4" />
       <div className="absolute inset-0 bg-gradient-radial from-blue-900/20 via-transparent to-transparent opacity-50" />
 
       <div className="relative z-10 bg-white/5 border border-white/10 backdrop-blur-xl p-6 sm:p-10 rounded-2xl w-full max-w-lg shadow-2xl">
 
-        {/* Logo */}
         <div className="flex justify-center mb-6">
           <Link href="/" className="flex items-center gap-2">
             <Image
@@ -101,7 +95,6 @@ export default function LoginPage() {
           Welcome Back
         </h1>
 
-        {/* Social Login */}
         <Button
           variant="outline"
           className="w-full h-12 bg-white/90 text-black hover:bg-white flex items-center gap-3 text-base"
@@ -116,7 +109,6 @@ export default function LoginPage() {
           <div className="h-px bg-white/20 flex-1" />
         </div>
 
-        {/* Form message */}
         {message.text && (
           <div className={`p-3 rounded-md text-center mb-4 text-sm ${
             message.type === "success"
@@ -127,10 +119,7 @@ export default function LoginPage() {
           </div>
         )}
 
-        {/* Login Form */}
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
-
-          {/* Email */}
           <div>
             <Label htmlFor="email">Email</Label>
             <Input
@@ -142,7 +131,6 @@ export default function LoginPage() {
             <p className="text-red-400 text-sm mt-1">{errors.email?.message}</p>
           </div>
 
-          {/* Password */}
           <div>
             <Label htmlFor="password">Password</Label>
             <Input
@@ -154,7 +142,6 @@ export default function LoginPage() {
             <p className="text-red-400 text-sm mt-1">{errors.password?.message}</p>
           </div>
 
-          {/* Submit */}
           <Button
             type="submit"
             disabled={isLoading}

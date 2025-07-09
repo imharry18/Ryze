@@ -1,47 +1,39 @@
-import { auth, db } from "@/lib/firebase";
-import { createUserWithEmailAndPassword } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
 import { userSchema } from "@/lib/schemas/userSchema";
-import { generateUsername } from "@/lib/generateUsername"; // Using your existing helper
+import { generateUsername } from "@/lib/generateUsername"; 
 
 export async function registerUser(values) {
   try {
-    // 1. Generate Random Username
-    // We add a random number to ensure it is unique
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     const autoUsername = `${generateUsername(values.name)}${randomSuffix}`;
 
-    // 2. Create Auth Account
-    const res = await createUserWithEmailAndPassword(
-      auth,
-      values.email,
-      values.password
-    );
-
-    const User = res.user;
-
-    // 3. Prepare Firestore Data
     const userData = {
-      ...userSchema, // Load default structure
-      
-      // Override with actual data
-      uid: User.uid,
+      ...userSchema, 
       name: values.name,
       email: values.email,
-      username: autoUsername, // Saved here!
+      password: values.password, // IMPORTANT: Ensure you hash this before saving to DB
+      username: autoUsername, 
       college: values.college,
       year: values.year,
       branch: values.branch,
       rollNo: values.rollNo,
-      
-      createdAt: new Date(),
-      lastActiveAt: new Date(),
+      createdAt: new Date().toISOString(),
+      lastActiveAt: new Date().toISOString(),
     };
 
-    // 4. Save to Database
-    await setDoc(doc(db, "users", User.uid), userData);
+    // Call your local backend API here to save user to PostgreSQL/MongoDB
+    const res = await fetch("/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(userData),
+    });
 
-    return { success: true, user: User };
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.message || "Failed to create account");
+    }
+
+    return { success: true, user: data.user };
 
   } catch (error) {
     console.error("Registration Error:", error);
