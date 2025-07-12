@@ -3,9 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { collection, query, where, onSnapshot } from "firebase/firestore";
-import { db, auth } from "@/lib/firebase";
-import { onAuthStateChanged } from "firebase/auth";
+import { useAuth } from "@/hooks/useAuth";
 import { 
   Home, Search, PlusCircle, MessageSquare, TrendingUp, Settings, Ghost, Megaphone 
 } from "lucide-react";
@@ -14,11 +12,11 @@ import UploadModal from "@/components/upload/UploadModal";
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { user } = useAuth();
   const [isUploadMenuOpen, setIsUploadMenuOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [uploadType, setUploadType] = useState(null);
   const [totalUnread, setTotalUnread] = useState(0);
-  const [user, setUser] = useState(null);
   
   // Timer ref for the delay
   const closeMenuTimer = useRef(null);
@@ -41,25 +39,24 @@ export default function Sidebar() {
     }, 1000); // 1 second delay (as requested)
   };
 
-  // Global Unread Listener
+  // Global Unread Listener using local API
   useEffect(() => {
-    const unsubAuth = onAuthStateChanged(auth, (currentUser) => {
-        setUser(currentUser);
-        if (currentUser) {
-            const q = query(collection(db, "chats"), where("participants", "array-contains", currentUser.uid));
-            const unsubChats = onSnapshot(q, (snap) => {
-                let count = 0;
-                snap.docs.forEach(doc => {
-                    const data = doc.data();
-                    count += (data.unreadCount?.[currentUser.uid] || 0);
-                });
-                setTotalUnread(count);
-            });
-            return () => unsubChats();
+    if (user?.uid) {
+      const fetchUnreadChats = async () => {
+        try {
+          const res = await fetch(`/api/chats/unread?userId=${user.uid}`);
+          if (res.ok) {
+            const data = await res.json();
+            setTotalUnread(data.totalUnread || 0);
+          }
+        } catch (err) {
+          console.error("Failed to fetch unread chats", err);
         }
-    });
-    return () => unsubAuth();
-  }, []);
+      };
+      
+      fetchUnreadChats();
+    }
+  }, [user]);
 
   return (
     <>
@@ -100,7 +97,6 @@ export default function Sidebar() {
               onMouseEnter={handleMouseEnter}
               onMouseLeave={handleMouseLeave}
             >
-                {/* Main Trigger Button */}
                 <button className="w-full flex items-center gap-4 p-3 rounded-xl transition-all duration-200 group text-gray-400 hover:bg-white/5 hover:text-gray-200 border border-transparent">
                   <div className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 group-hover:scale-110 transition-transform text-cyan-500">
                     <PlusCircle size={24} />
@@ -108,19 +104,13 @@ export default function Sidebar() {
                   <span className="text-base font-medium tracking-wide">Add</span>
                 </button>
                 
-                {/* Dropdown Menu Container */}
-                {/* Placed absolute relative to the button wrapper */}
                 {isUploadMenuOpen && (
                     <div 
-                      className="absolute left-full bottom-0 pl-6 z-50" // bottom-0 aligns bottoms, pl-6 is the safe bridge
+                      className="absolute left-full bottom-0 pl-6 z-50"
                       onMouseEnter={handleMouseEnter}
                       onMouseLeave={handleMouseLeave}
                     >
-                        {/* The Menu Itself */}
                         <UploadMenu close={() => setIsUploadMenuOpen(false)} openModal={openModal} />
-                        
-                        {/* Little Triangle Pointer (Optional, purely visual) */}
-                        {/* <div className="absolute bottom-6 left-4 w-3 h-3 bg-[#18181b] border-l border-b border-white/10 transform rotate-45" /> */}
                     </div>
                 )}
             </div>

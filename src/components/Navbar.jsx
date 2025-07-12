@@ -3,9 +3,6 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { doc, onSnapshot } from "firebase/firestore";
-import { signOut } from "firebase/auth";
-
 import {
   Menu,
   X,
@@ -17,8 +14,6 @@ import {
 
 import { useAuth } from "@/hooks/useAuth";
 import { useNotifications } from "@/hooks/useNotifications";
-import { auth, db } from "@/lib/firebase";
-
 import { Button } from "./ui/Button";
 
 export default function Navbar() {
@@ -30,25 +25,36 @@ export default function Navbar() {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isAccountMenu, setIsAccountMenu] = useState(false);
   
-  // State for Firestore Profile Data
+  // State for Profile Data
   const [profile, setProfile] = useState(null);
 
-  // Fetch Firestore Profile (Username & DP) Realtime
+  // Fetch Profile (Username & DP) from local API
   useEffect(() => {
     if (!user?.uid) return;
 
-    const unsub = onSnapshot(doc(db, "users", user.uid), (docSnap) => {
-      if (docSnap.exists()) {
-        setProfile(docSnap.data());
+    const fetchProfile = async () => {
+      try {
+        const res = await fetch(`/api/users/${user.uid}`);
+        if (res.ok) {
+          const data = await res.json();
+          setProfile(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch profile data:", err);
       }
-    });
+    };
 
-    return () => unsub();
+    fetchProfile();
   }, [user]);
 
   const handleLogout = async () => {
-    await signOut(auth);
-    window.location.href = "/login";
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      window.location.href = "/login";
+    } catch (err) {
+      console.error("Logout failed:", err);
+      window.location.href = "/login";
+    }
   };
 
   if (loading) {
@@ -104,7 +110,6 @@ export default function Navbar() {
                 >
                   <div className="relative h-8 w-8 rounded-full overflow-hidden border border-white/20 bg-gray-800">
                       <Image 
-                          // Priority: Firestore DP -> Auth Photo -> Default
                           src={profile?.dp || user.photoURL || "/default-dp.png"} 
                           alt="Profile" 
                           fill 
@@ -112,7 +117,6 @@ export default function Navbar() {
                       />
                   </div>
                   <span className="hidden md:block text-sm font-bold text-white max-w-[150px] truncate">
-                      {/* Priority: Firestore Username -> Auth DisplayName -> Fallback */}
                       {profile?.username || user.displayName || "User"}
                   </span>
                 </div>
