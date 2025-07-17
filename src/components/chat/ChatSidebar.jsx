@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { db } from "@/lib/firebase"; 
-import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { usePathname } from "next/navigation";
 import { Search, MessageCircle } from "lucide-react";
 import UserRow from "./UserRow"; 
@@ -11,36 +9,34 @@ export default function ChatSidebar({ user, className }) {
   const pathname = usePathname();
   const [usersMap, setUsersMap] = useState({});
   const [chatsData, setChatsData] = useState([]);
-  const [searchTerm, setSearchTerm] = useState(""); // Search State
+  const [searchTerm, setSearchTerm] = useState("");
 
-  // 1. Fetch All Users
   useEffect(() => {
     if (!user) return;
-    const unsub = onSnapshot(collection(db, "users"), (snap) => {
-      const map = {};
-      snap.docs.forEach((doc) => {
-        map[doc.id] = { uid: doc.id, ...doc.data() };
-      });
-      setUsersMap(map);
-    });
-    return () => unsub();
+
+    const fetchSidebarData = async () => {
+      try {
+        const res = await fetch(`/api/chats/sidebar?userId=${user.uid}`);
+        if (res.ok) {
+          const data = await res.json();
+          setUsersMap(data.usersMap || {});
+          setChatsData(data.chats || []);
+        }
+      } catch (err) {
+        console.error("Failed to load sidebar data", err);
+      }
+    };
+
+    fetchSidebarData();
+    // Poll every 5 seconds to simulate real-time updates
+    const intervalId = setInterval(fetchSidebarData, 5000);
+    return () => clearInterval(intervalId);
   }, [user]);
 
-  // 2. Fetch My Chats
-  useEffect(() => {
-    if (!user) return;
-    const q = query(collection(db, "chats"), where("participants", "array-contains", user.uid));
-    const unsub = onSnapshot(q, (snap) => {
-      setChatsData(snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
-    });
-    return () => unsub();
-  }, [user]);
-
-  // 3. Process & Filter Lists
   const { interactedUsers, suggestedUsers } = useMemo(() => {
     if (!user) return { interactedUsers: [], suggestedUsers: [] };
 
-    const lowerTerm = searchTerm.toLowerCase(); // Prepare search term
+    const lowerTerm = searchTerm.toLowerCase(); 
     const myProfile = usersMap[user.uid];
     const myFollowingList = myProfile?.following || []; 
 
@@ -52,7 +48,6 @@ export default function ChatSidebar({ user, className }) {
       if (otherUserId && usersMap[otherUserId]) {
         const partner = usersMap[otherUserId];
         
-        // SEARCH FILTER (Skip if name doesn't match)
         if (!partner.name.toLowerCase().includes(lowerTerm)) return;
 
         interactedIDs.add(otherUserId);
@@ -64,7 +59,7 @@ export default function ChatSidebar({ user, className }) {
         interactedList.push({
           ...partner,
           lastMessage: chat.lastMessage,
-          lastMessageAt: chat.lastMessageAt?.seconds || 0,
+          lastMessageAt: chat.lastMessageAt || 0,
           unread: finalCount,
         });
       }
@@ -74,16 +69,10 @@ export default function ChatSidebar({ user, className }) {
 
     const suggestionList = Object.values(usersMap)
       .filter((u) => {
-        // 1. Exclude myself
         if (u.uid === user.uid) return false; 
-        
-        // 2. Exclude people I already have an active chat with (they are in the top list)
         if (interactedIDs.has(u.uid)) return false; 
-        
-        // 3. [UPDATED] Only show people I follow
         if (!myFollowingList.includes(u.uid)) return false;
         
-        // 4. Search Filter (matches name)
         return u.name.toLowerCase().includes(lowerTerm);
       })
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -93,7 +82,6 @@ export default function ChatSidebar({ user, className }) {
 
   return (
     <aside className={`flex flex-col bg-[#050505] border-r border-white/5 h-full ${className}`}>
-        {/* Header */}
         <div className="p-5 pb-2 z-10">
           <div className="flex justify-between items-center mb-5">
             <h1 className="text-2xl font-bold text-white tracking-wide">Chats</h1>
@@ -102,7 +90,6 @@ export default function ChatSidebar({ user, className }) {
             </div>
           </div>
           
-          {/* Techy Search Bar */}
           <div className="group relative mb-2">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search size={15} className="text-gray-600 group-focus-within:text-cyan-400 transition-colors duration-300" />
@@ -111,18 +98,13 @@ export default function ChatSidebar({ user, className }) {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search people..." 
-              className="w-full bg-[#0f0f0f] border border-white/10 text-sm text-gray-300 rounded-xl py-2.5 pl-10 pr-4 
-                         focus:outline-none focus:border-cyan-500/40 focus:ring-1 focus:ring-cyan-500/20 
-                         focus:bg-[#141414] placeholder:text-gray-700 transition-all duration-300" 
+              className="w-full bg-[#0f0f0f] border border-white/10 text-sm text-gray-300 rounded-xl py-2.5 pl-10 pr-4 focus:outline-none focus:border-cyan-500/40 focus:ring-1 focus:ring-cyan-500/20 focus:bg-[#141414] placeholder:text-gray-700 transition-all duration-300" 
             />
           </div>
         </div>
 
-        {/* List Area - HIDDEN SCROLLBAR */}
-        <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-1 
-                        scrollbar-none [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
+        <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-1 scrollbar-none [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
           
-          {/* Active Chats */}
           {interactedUsers.map((person) => (
             <UserRow 
               key={person.uid} 
@@ -138,7 +120,6 @@ export default function ChatSidebar({ user, className }) {
             </div>
           )}
 
-          {/* Suggestions Header */}
           {suggestedUsers.length > 0 && (
             <div className="pt-6 pb-3 px-2">
               <div className="flex items-center gap-3 opacity-40">
@@ -148,7 +129,6 @@ export default function ChatSidebar({ user, className }) {
             </div>
           )}
 
-          {/* Suggestions */}
           <div className="space-y-1">
             {suggestedUsers.map((person) => (
               <UserRow 

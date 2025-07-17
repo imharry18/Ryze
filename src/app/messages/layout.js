@@ -1,25 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { auth } from "@/lib/firebase";
-import { onAuthStateChanged } from "firebase/auth";
 import { usePathname } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import ChatSidebar from "@/components/chat/ChatSidebar"; 
+import { useAuth } from "@/hooks/useAuth";
 
 export default function MessagesLayout({ children }) {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { user, loading } = useAuth();
   const pathname = usePathname();
   const isMainPage = pathname === "/messages";
-
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (currentUser) => {
-      if (currentUser) setUser(currentUser);
-      setLoading(false);
-    });
-    return () => unsub();
-  }, []);
 
   if (loading) return <div className="h-screen bg-black flex items-center justify-center"><Loader2 className="animate-spin text-blue-500" /></div>;
 
