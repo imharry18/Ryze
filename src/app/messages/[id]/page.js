@@ -1,36 +1,29 @@
 "use client";
 
 import { useEffect, useState, useRef, useLayoutEffect } from "react";
-import { auth, db } from "@/lib/firebase";
-import { collection, query, orderBy, onSnapshot, doc, getDoc, updateDoc, writeBatch, where, getDocs } from "firebase/firestore";
-import { onAuthStateChanged } from "firebase/auth";
 import { useParams, useRouter } from "next/navigation";
-import { getChatId, sendMessage, clearChatHistory, blockUser, deleteMessage } from "@/lib/actions/social"; 
+import { getChatId, sendMessage, clearChatHistory, blockUser, deleteMessage, markChatAsRead } from "@/lib/actions/social"; 
 import { Send, ArrowLeft, MoreVertical, X, CornerDownLeft, Reply, Copy, Trash2 } from "lucide-react";
 import Link from "next/link";
 import ChatMenu from "@/components/chat/ChatMenu";
 import MessageBubble from "@/components/chat/MessageBubble";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function ChatRoom() {
   const { id: targetUserId } = useParams();
   const router = useRouter();
+  const { user } = useAuth();
   
-  // User State
-  const [user, setUser] = useState(null);
   const [targetUser, setTargetUser] = useState(null);
-  
-  // Chat State
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [partnerTyping, setPartnerTyping] = useState(false);
   const [clearedAt, setClearedAt] = useState(null); 
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   
-  // UI State
-  const [isMenuOpen, setIsMenuOpen] = useState(false); // Top header menu
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [replyMessage, setReplyMessage] = useState(null);
   
-  // --- CONTEXT MENU STATE ---
   const [contextMenu, setContextMenu] = useState({ 
     visible: false, 
     x: 0, 
@@ -38,24 +31,16 @@ export default function ChatRoom() {
     msg: null 
   });
 
-  // Refs
   const typingTimeoutRef = useRef(null);
   const scrollRef = useRef(null);
   const inputRef = useRef(null); 
   const isMounted = useRef(true);
 
-  // --- HANDLERS: Context Menu ---
   const handleContextMenu = (e, msg) => {
     e.preventDefault();
     const x = Math.min(e.clientX, window.innerWidth - 170); 
     const y = Math.min(e.clientY, window.innerHeight - 200);
-    
-    setContextMenu({
-      visible: true,
-      x,
-      y,
-      msg
-    });
+    setContextMenu({ visible: true, x, y, msg });
   };
 
   const closeContextMenu = () => {
@@ -64,13 +49,11 @@ export default function ChatRoom() {
     }
   };
 
-  // Global Click Listener to close menu
   useEffect(() => {
     window.addEventListener("click", closeContextMenu);
     return () => window.removeEventListener("click", closeContextMenu);
   }, [contextMenu.visible]);
 
-  // --- Global Auto-Focus ---
   useEffect(() => {
     const handleGlobalKeyDown = (e) => {
       const activeTag = document.activeElement?.tagName?.toLowerCase();
@@ -82,12 +65,10 @@ export default function ChatRoom() {
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
   }, []);
 
-  // Focus on Reply
   useEffect(() => {
     if (replyMessage) inputRef.current?.focus();
   }, [replyMessage]);
 
-  // Scroll Logic
   useLayoutEffect(() => {
     if (scrollRef.current) {
       const container = scrollRef.current;
@@ -98,64 +79,43 @@ export default function ChatRoom() {
     }
   }, [messages, isInitialLoad]);
 
-  // --- FIREBASE LOGIC ---
-  const markRead = async (currentUserId, targetId, chatId) => {
-    if (!currentUserId || !targetId) return;
-    await updateDoc(doc(db, "chats", chatId), { [`unreadCount.${currentUserId}`]: 0 }).catch(() => {});
-    const q = query(collection(db, "chats", chatId, "messages"), where("senderId", "==", targetId), where("read", "==", false));
-    const snapshot = await getDocs(q);
-    if (!snapshot.empty) {
-      const batch = writeBatch(db);
-      snapshot.docs.forEach((doc) => batch.update(doc.ref, { read: true }));
-      await batch.commit();
-    }
-  };
-
   useEffect(() => {
     isMounted.current = true;
-    const unsubAuth = onAuthStateChanged(auth, async (currentUser) => {
-      if (!currentUser) return router.push("/login");
-      setUser(currentUser);
+    if (!user) return;
 
-      const targetSnap = await getDoc(doc(db, "users", targetUserId));
-      if (targetSnap.exists()) setTargetUser(targetSnap.data());
+    const fetchChatData = async () => {
+      if (!isMounted.current) return;
+      try {
+        const res = await fetch(`/api/chats/conversation?currentUserId=${user.uid}&targetUserId=${targetUserId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setTargetUser(data.targetUser);
+          setMessages(data.messages || []);
+          setPartnerTyping(data.typing || false);
+          setClearedAt(data.clearedAt || null);
+          setIsInitialLoad(false);
 
-      const chatId = getChatId(currentUser.uid, targetUserId);
-      markRead(currentUser.uid, targetUserId, chatId);
-
-      const unsubMeta = onSnapshot(doc(db, "chats", chatId), (docSnap) => {
-        if (!isMounted.current) return;
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          setPartnerTyping(data.typing && data.typing[targetUserId]);
-          if (data.clearedAt && data.clearedAt[currentUser.uid]) setClearedAt(data.clearedAt[currentUser.uid]);
-          if (data.unreadCount && data.unreadCount[currentUser.uid] > 0) {
-             updateDoc(doc(db, "chats", chatId), { [`unreadCount.${currentUser.uid}`]: 0 }).catch(()=>{});
+          const lastMsg = data.messages?.[data.messages.length - 1];
+          if (lastMsg && lastMsg.senderId === targetUserId && !lastMsg.read) {
+             await markChatAsRead(user.uid, targetUserId);
           }
         }
-      });
+      } catch (err) {
+        console.error("Failed to load chat data", err);
+      }
+    };
 
-      const q = query(collection(db, "chats", chatId, "messages"), orderBy("createdAt", "asc"));
-      const unsubMsg = onSnapshot(q, (snap) => {
-        if (!isMounted.current) return;
-        const msgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        setMessages(msgs);
-        setIsInitialLoad(false);
-        
-        const lastMsg = msgs[msgs.length - 1];
-        if (lastMsg && lastMsg.senderId === targetUserId && !lastMsg.read) {
-           markRead(currentUser.uid, targetUserId, chatId);
-        }
-      });
+    fetchChatData();
+    const intervalId = setInterval(fetchChatData, 3000); 
+    
+    return () => {
+      isMounted.current = false;
+      clearInterval(intervalId);
+    };
+  }, [targetUserId, user]);
 
-      return () => { unsubMsg(); unsubMeta(); };
-    });
-    return () => { isMounted.current = false; return unsubAuth(); };
-  }, [targetUserId, router]);
-
-  // --- ACTION HANDLERS ---
   const handleSend = async () => {
-    if (!input.trim()) return;
+    if (!input.trim() || !user) return;
     const text = input;
     const replyContext = replyMessage ? {
         id: replyMessage.id,
@@ -167,19 +127,33 @@ export default function ChatRoom() {
     setReplyMessage(null);
     inputRef.current?.focus(); 
     
-    const chatId = getChatId(user.uid, targetUserId);
-    updateDoc(doc(db, "chats", chatId), { [`typing.${user.uid}`]: false }).catch(()=>{});
+    // Typing indicator update to local API
+    await fetch('/api/chats/typing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: user.uid, targetUserId, typing: false })
+    });
+
     await sendMessage(user.uid, targetUserId, text, replyContext);
   };
 
   const handleInputChange = async (e) => {
     setInput(e.target.value);
     if (!user) return;
-    const chatId = getChatId(user.uid, targetUserId);
-    updateDoc(doc(db, "chats", chatId), { [`typing.${user.uid}`]: true }).catch(()=>{});
+    
+    await fetch('/api/chats/typing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: user.uid, targetUserId, typing: true })
+    });
+
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    typingTimeoutRef.current = setTimeout(() => {
-      updateDoc(doc(db, "chats", chatId), { [`typing.${user.uid}`]: false }).catch(()=>{});
+    typingTimeoutRef.current = setTimeout(async () => {
+      await fetch('/api/chats/typing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.uid, targetUserId, typing: false })
+      });
     }, 2000);
   };
 
@@ -213,7 +187,7 @@ export default function ChatRoom() {
   };
 
   const visibleMessages = messages.filter(msg => {
-      if (clearedAt && msg.createdAt && msg.createdAt.seconds <= clearedAt.seconds) return false;
+      if (clearedAt && msg.createdAt && new Date(msg.createdAt) <= new Date(clearedAt)) return false;
       if (msg.deletedFor?.includes(user?.uid)) return false;
       return true;
   });
@@ -225,12 +199,10 @@ export default function ChatRoom() {
   return (
     <div className="flex flex-col h-full bg-[#050505] relative overflow-hidden">
 
-      {/* Header */}
       <div className="flex-shrink-0 p-4 flex items-center justify-between bg-[#0a0a0a]/80 backdrop-blur-xl border-b border-white/5 z-10">
         <div className="flex items-center gap-4">
             <Link href="/messages" className="md:hidden p-2 -ml-2 hover:bg-white/10 rounded-full text-gray-400 hover:text-white"><ArrowLeft size={22} /></Link>
             
-            {/* CLICKABLE PROFILE SECTION */}
             <Link href={`/profile/${targetUser.uid}`} className="flex items-center gap-4 hover:opacity-80 transition cursor-pointer">
                 <div className="relative w-10 h-10 rounded-full p-[1.5px] bg-gradient-to-tr from-indigo-500 to-purple-500">
                     <img src={targetUser.dp || "/default-dp.png"} className="w-full h-full rounded-full object-cover bg-black" />
@@ -245,7 +217,6 @@ export default function ChatRoom() {
         <ChatMenu isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} onClearChat={handleClearChat} onBlockUser={handleBlockUser} />
       </div>
 
-      {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-4 no-scrollbar z-0" ref={scrollRef}>
         {visibleMessages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center opacity-40 select-none"><p className="text-indigo-200 font-medium">No messages here yet</p></div>
@@ -263,7 +234,6 @@ export default function ChatRoom() {
         {partnerTyping && <div className="text-xs text-gray-500 pl-4">Typing...</div>}
       </div>
 
-      {/* Input Area */}
       <div className="p-4 z-20 relative">
         {replyMessage && (
             <div className="mx-2 mb-2 bg-[#1a1a1a] border border-indigo-500/30 rounded-xl p-3 flex items-center justify-between animate-in slide-in-from-bottom-2">
@@ -292,7 +262,6 @@ export default function ChatRoom() {
         </div>
       </div>
 
-      {/* --- CONTEXT MENU --- */}
       {contextMenu.visible && contextMenu.msg && (
         <div 
           style={{ top: contextMenu.y, left: contextMenu.x }}
