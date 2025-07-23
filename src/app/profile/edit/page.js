@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { auth, db } from "@/lib/firebase";
-import { doc, getDoc } from "firebase/firestore";
 import { updateUser } from "@/lib/actions/updateUser";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
 
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
@@ -17,7 +16,8 @@ import Link from "next/link";
 
 export default function EditProfilePage() {
   const router = useRouter();
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser, loading: authLoading } = useAuth();
+  
   const [userData, setUserData] = useState({
     name: "",
     username: "",
@@ -38,23 +38,20 @@ export default function EditProfilePage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    const unsub = auth.onAuthStateChanged((user) => {
-      if (user) {
-        setCurrentUser(user);
-        fetchData(user.uid);
+    if (!authLoading) {
+      if (currentUser) {
+        fetchData(currentUser.uid);
       } else {
         router.push("/login");
       }
-    });
-    return () => unsub();
-  }, [router]);
+    }
+  }, [currentUser, authLoading, router]);
 
   async function fetchData(uid) {
     try {
-      const ref = doc(db, "users", uid);
-      const snap = await getDoc(ref);
-      if (snap.exists()) {
-        const data = snap.data();
+      const res = await fetch(`/api/users/${uid}`);
+      if (res.ok) {
+        const data = await res.json();
         setUserData((prev) => ({ ...prev, ...data }));
         setDpPreview(data.dp || "/default-dp.png");
       }
@@ -92,7 +89,6 @@ export default function EditProfilePage() {
         toast.dismiss();
         toast.success("Profile updated!");
         router.refresh();
-        // Redirect back to the unified profile page
         router.push(`/profile/${currentUser.uid}`); 
       } else {
         throw new Error(res.error);
@@ -105,7 +101,7 @@ export default function EditProfilePage() {
     }
   }
 
-  if (loading) return <div className="h-screen flex items-center justify-center text-white"><Loader2 className="animate-spin" /></div>;
+  if (loading || authLoading) return <div className="h-screen flex items-center justify-center text-white"><Loader2 className="animate-spin" /></div>;
 
   return (
     <div className="pt-24 max-w-2xl mx-auto text-white px-4 pb-20 animate-fadeIn">
@@ -120,7 +116,7 @@ export default function EditProfilePage() {
       <div className="flex justify-center mb-8">
         <div className="relative group">
           <div className="w-32 h-32 relative rounded-full overflow-hidden border-2 border-white/20 bg-gray-800">
-            <Image src={dpPreview} alt="DP" fill className="object-cover" unoptimized />
+            <Image src={dpPreview || "/default-dp.png"} alt="DP" fill className="object-cover" unoptimized />
           </div>
           <label className="absolute bottom-1 right-1 bg-blue-600 p-2 rounded-full cursor-pointer hover:bg-blue-500 transition shadow-lg">
             <Camera size={18} className="text-white" />
@@ -147,7 +143,6 @@ export default function EditProfilePage() {
           <Textarea value={userData.bio} onChange={(e) => handleChange("bio", e.target.value)} rows={4} className="bg-black/20" />
         </div>
 
-        {/* College Info (Read Only or Editable depending on your policy) */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <Label className="mb-2 block">College</Label>

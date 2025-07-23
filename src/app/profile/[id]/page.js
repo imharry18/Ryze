@@ -2,9 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { doc, collection, query, where, onSnapshot } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
-import { onAuthStateChanged } from "firebase/auth";
+import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
 import { Loader2, MessageCircle, Edit3 } from "lucide-react";
 import PostCard from "@/components/feed/PostCard";
@@ -13,54 +11,48 @@ import ProfileHeader from "@/components/profile/ProfileHeader";
 
 export default function UserProfile() {
   const { id: profileUserId } = useParams();
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser } = useAuth();
+  
   const [profileUser, setProfileUser] = useState(null);
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // Follow Logic States
   const [isFollowing, setIsFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
 
   useEffect(() => {
-    const unsubAuth = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
-      
-      if (!profileUserId) return;
+    if (!profileUserId) return;
 
-      // 1. Fetch Profile Data Realtime
-      const unsubUser = onSnapshot(doc(db, "users", profileUserId), (docSnap) => {
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          setProfileUser(data);
-          
-          // Check follow status
-          if (user && data.followers?.includes(user.uid)) {
+    const fetchProfileAndPosts = async () => {
+      try {
+        // Fetch User Info
+        const userRes = await fetch(`/api/users/${profileUserId}`);
+        if (userRes.ok) {
+          const userData = await userRes.json();
+          setProfileUser(userData);
+          if (currentUser && userData.followers?.includes(currentUser.uid)) {
             setIsFollowing(true);
           } else {
             setIsFollowing(false);
           }
-        } else {
-            setProfileUser(null);
         }
-      });
 
-      // 2. Fetch User Posts (Uploads)
-      const q = query(collection(db, "posts"), where("userId", "==", profileUserId));
-      const unsubPosts = onSnapshot(q, (snapshot) => {
-          const p = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-          p.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-          setPosts(p);
-          setLoading(false);
-      });
+        // Fetch User Posts
+        const postsRes = await fetch(`/api/users/${profileUserId}/posts`);
+        if (postsRes.ok) {
+          const postsData = await postsRes.json();
+          setPosts(postsData.posts || []);
+        }
 
-      return () => {
-          unsubUser();
-          unsubPosts();
-      };
-    });
-    return () => unsubAuth();
-  }, [profileUserId]);
+      } catch (err) {
+        console.error("Failed to load profile:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProfileAndPosts();
+  }, [profileUserId, currentUser]);
 
   const handleFollow = async () => {
     if (!currentUser) return alert("Login required");
@@ -68,8 +60,10 @@ export default function UserProfile() {
     try {
         if (isFollowing) {
             await unfollowUser(currentUser.uid, profileUserId);
+            setIsFollowing(false);
         } else {
             await followUser(currentUser.uid, profileUserId);
+            setIsFollowing(true);
         }
     } catch (err) {
         console.error(err);
@@ -87,7 +81,6 @@ export default function UserProfile() {
     <div className="min-h-screen bg-black text-white pb-20">
       <div className="max-w-4xl mx-auto min-h-screen">
         
-        {/* Header with Conditional Buttons */}
         <ProfileHeader profileUser={profileUser}>
             {isMe ? (
                 <Link href="/profile/edit">
@@ -119,10 +112,8 @@ export default function UserProfile() {
             )}
         </ProfileHeader>
 
-        {/* Divider */}
         <div className="h-px bg-white/10 w-full my-4 max-w-5xl mx-auto" />
 
-        {/* Uploads Section */}
         <div className="max-w-2xl mx-auto px-4 py-6">
             <h3 className="text-lg font-bold text-white mb-6">Uploads</h3>
             
@@ -134,7 +125,7 @@ export default function UserProfile() {
             ) : (
                 <div className="space-y-6">
                     {posts.map(post => (
-                        <PostCard key={post.id} post={post} />
+                        <PostCard key={post.id || post._id} post={post} />
                     ))}
                 </div>
             )}
