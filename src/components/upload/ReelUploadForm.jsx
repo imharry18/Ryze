@@ -3,9 +3,9 @@ import React, { useRef, useState, useEffect } from "react";
 import useUpload from "@/hooks/useUpload";
 import MediaPreview from "./MediaPreview";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input"; // Import Input
+import { Input } from "@/components/ui/Input"; 
 import { useAuth } from "@/hooks/useAuth";
-import { MapPin } from "lucide-react"; // Import MapPin
+import { MapPin } from "lucide-react";
 
 export default function ReelUploadForm({ onClose }) {
   const { user } = useAuth();
@@ -13,38 +13,22 @@ export default function ReelUploadForm({ onClose }) {
   
   const [file, setFile] = useState(null);
   const [previewURL, setPreviewURL] = useState(""); 
-  
   const [caption, setCaption] = useState("");
-  const [location, setLocation] = useState(""); // New State
-  const [postType, setPostType] = useState("post");
+  const [location, setLocation] = useState("");
   const [videoError, setVideoError] = useState("");
 
   const { upload, progress, uploading, error, reset } = useUpload();
 
   useEffect(() => {
-    return () => {
-      if (previewURL) {
-        URL.revokeObjectURL(previewURL);
-      }
-    };
+    return () => { if (previewURL) URL.revokeObjectURL(previewURL); };
   }, [previewURL]);
 
   const handleFile = (e) => {
     const f = e.target.files?.[0];
-    
-    if (!f) {
-       setFile(null);
-       setPreviewURL("");
-       return;
-    }
-
-    if (!f.type.startsWith("video/")) {
-      alert("Please pick a video.");
-      return;
-    }
+    if (!f) return;
+    if (!f.type.startsWith("video/")) return alert("Please pick a video.");
 
     const url = URL.createObjectURL(f);
-
     const vid = document.createElement("video");
     vid.preload = "metadata";
     vid.src = url; 
@@ -61,11 +45,6 @@ export default function ReelUploadForm({ onClose }) {
         setPreviewURL(url); 
       }
     };
-
-    vid.onerror = () => {
-      setVideoError("Failed to load video metadata.");
-      URL.revokeObjectURL(url);
-    };
   };
 
   const startUpload = async () => {
@@ -74,8 +53,14 @@ export default function ReelUploadForm({ onClose }) {
     if (videoError) return;
 
     try {
-      // Pass location to upload function
-      await upload({ uid: user.uid, file, mediaType: "video", caption, location, postType });
+      await upload({ 
+        uid: user.id, // NextAuth ID
+        file, 
+        mediaType: "video", 
+        caption, 
+        location, 
+        postType: "reel" 
+      });
       reset();
       onClose?.();
     } catch (e) {
@@ -85,21 +70,14 @@ export default function ReelUploadForm({ onClose }) {
 
   return (
     <div className="flex flex-col md:flex-row gap-6 p-4 min-h-[400px]">
-      {/* Left: Media */}
       <div className="w-full md:w-1/2 bg-black/60 rounded-xl border border-white/10 flex items-center justify-center overflow-hidden relative group">
         {previewURL ? (
            <div className="relative w-full h-full flex items-center justify-center bg-black">
              <MediaPreview previewURL={previewURL} fileType={file?.type} />
              <button 
-               onClick={() => { 
-                 setFile(null); 
-                 setPreviewURL(""); 
-                 fileRef.current.value = ""; 
-               }}
+               onClick={() => { setFile(null); setPreviewURL(""); fileRef.current.value = ""; }}
                className="absolute top-2 right-2 bg-black/50 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition"
-             >
-                ✕
-             </button>
+             >✕</button>
           </div>
         ) : (
           <div className="text-center text-gray-400 p-6">
@@ -110,63 +88,23 @@ export default function ReelUploadForm({ onClose }) {
         )}
       </div>
 
-      {/* Right: Details */}
       <div className="w-full md:w-1/2 flex flex-col">
         <h3 className="text-xl font-semibold text-white mb-4">New Reel</h3>
-        
         <div className="space-y-4 flex-1">
-            <div>
-                <label className="text-sm text-gray-400 mb-1 block">Caption</label>
-                <textarea 
-                    value={caption} 
-                    onChange={(e)=>setCaption(e.target.value)} 
-                    placeholder="Describe your reel..." 
-                    className="w-full p-3 bg-white/5 border border-white/10 rounded-lg h-24 resize-none focus:outline-none focus:border-blue-500 text-white transition" 
-                />
+            <textarea value={caption} onChange={(e)=>setCaption(e.target.value)} placeholder="Describe your reel..." className="w-full p-3 bg-white/5 border border-white/10 rounded-lg h-24 resize-none focus:outline-none focus:border-blue-500 text-white transition" />
+            <div className="relative">
+                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+                <Input value={location} onChange={(e)=>setLocation(e.target.value)} placeholder="Location" className="pl-9 bg-white/5 border-white/10" />
             </div>
-
-            {/* Location Input */}
-            <div>
-                <label className="text-sm text-gray-400 mb-1 block">Add Location</label>
-                <div className="relative">
-                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
-                    <Input 
-                        value={location} 
-                        onChange={(e)=>setLocation(e.target.value)} 
-                        placeholder="Nagpur, India" 
-                        className="pl-9 bg-white/5 border-white/10" 
-                    />
-                </div>
-            </div>
-            
-            <div>
-                <label className="text-sm text-gray-400 mb-2 block">Category</label>
-                <div className="flex gap-3">
-                    <button className={`flex-1 py-2 rounded-lg border transition ${postType==="post"?"bg-blue-600 border-blue-600 text-white":"border-white/20 text-gray-400"}`} onClick={()=>setPostType("post")}>Standard</button>
-                    <button className={`flex-1 py-2 rounded-lg border transition ${postType==="event"?"bg-purple-600 border-purple-600 text-white":"border-white/20 text-gray-400"}`} onClick={()=>setPostType("event")}>Event</button>
-                </div>
-            </div>
-
-            {videoError && <p className="text-red-400 text-sm bg-red-900/20 p-2 rounded border border-red-900/50">{videoError}</p>}
-            {error && <p className="text-red-400 text-sm bg-red-900/20 p-2 rounded border border-red-900/50">{error}</p>}
+            {videoError && <p className="text-red-400 text-sm">{videoError}</p>}
+            {error && <p className="text-red-400 text-sm">{error}</p>}
         </div>
 
         <div className="mt-6 pt-4 border-t border-white/10">
-          {uploading && (
-            <div className="mb-4">
-               <div className="flex justify-between text-xs text-blue-400 mb-1">
-                 <span>{progress === 0 ? "Preparing..." : "Uploading..."}</span>
-                 <span>{progress}%</span>
-              </div>
-              <div className="w-full bg-gray-800 h-1.5 rounded-full overflow-hidden">
-                <div className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-300" style={{width: `${Math.max(5, progress)}%`}} />
-              </div>
-            </div>
-          )}
-
+          {uploading && <div className="text-blue-400 text-xs mb-2">Uploading: {progress}%</div>}
           <div className="flex gap-3 justify-end">
             <Button variant="ghost" onClick={onClose} disabled={uploading}>Cancel</Button>
-            <Button onClick={startUpload} disabled={uploading || !file || !!videoError} className="min-w-[100px]">
+            <Button onClick={startUpload} disabled={uploading || !file || !!videoError}>
                 {uploading ? "Uploading..." : "Share Reel"}
             </Button>
           </div>
