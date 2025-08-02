@@ -1,43 +1,55 @@
-import { useState, useCallback } from "react";
-import { uploadPostAndMedia } from "@/lib/uploadPost";
-import { storage, db } from "@/lib/firebase";
+"use client";
+
+import { useState } from "react";
 
 export default function useUpload() {
   const [progress, setProgress] = useState(0);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState("");
-  const [successId, setSuccessId] = useState(null);
+  const [error, setError] = useState(null);
+  const [url, setUrl] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
 
-  // Updated signature to accept extraData
-  const upload = useCallback(async ({ uid, file, mediaType, caption, location, postType, extraData = {} }) => {
-    setError("");
-    setSuccessId(null);
-    setUploading(true);
+  const uploadFile = async (file, path) => {
+    if (!file) return null;
+    
+    setIsUploading(true);
+    setError(null);
     setProgress(0);
 
     try {
-      const r = await uploadPostAndMedia({
-        storage,
-        db,
-        uid,
-        file,
-        mediaType,
-        caption,
-        location, 
-        postType,
-        extraData, // Pass it down
-        onProgress: (p) => setProgress(p),
-      });
-      setSuccessId(r.postId);
-      setUploading(false);
-      return r;
-    } catch (e) {
-      console.error("upload failed", e);
-      setError(e.message || "Upload failed");
-      setUploading(false);
-      throw e;
-    }
-  }, []);
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("path", path); // Tells your backend where to store it (e.g., 'avatars', 'posts')
 
-  return { upload, progress, uploading, error, successId, reset: () => { setProgress(0); setUploading(false); setError(""); setSuccessId(null); } };
+      // Simulate upload progress for the UI
+      const progressInterval = setInterval(() => {
+        setProgress((prev) => (prev < 90 ? prev + 10 : prev));
+      }, 200);
+
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      clearInterval(progressInterval);
+      setProgress(100);
+
+      if (!res.ok) {
+        throw new Error("File upload failed");
+      }
+
+      const data = await res.json();
+      setUrl(data.url);
+      setIsUploading(false);
+      
+      return data.url;
+      
+    } catch (err) {
+      console.error("Upload error:", err);
+      setError(err.message);
+      setIsUploading(false);
+      return null;
+    }
+  };
+
+  return { uploadFile, progress, error, url, isUploading };
 }
