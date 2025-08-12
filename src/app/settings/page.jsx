@@ -1,72 +1,51 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { auth, db } from "@/lib/firebase";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
-import { 
-  updatePassword, 
-  sendPasswordResetEmail, 
-  deleteUser, 
-  signOut 
-} from "firebase/auth";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
 
-// UI Components
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { Switch } from "@/components/ui/Switch";
-import {
-  User,
-  Lock,
-  Bell,
-  Shield,
-  Palette,
-  LogOut,
-  Trash2,
-  ChevronRight,
-  Loader2
-} from "lucide-react";
+import { User, Lock, Bell, Shield, Palette, LogOut, Trash2, ChevronRight } from "lucide-react";
 
 export default function SettingsPage() {
   const router = useRouter();
-  const [user, setUser] = useState(null);
+  const { user, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("account"); // account | privacy | notifications | display
+  const [activeTab, setActiveTab] = useState("account");
 
-  // Form States
   const [passwordData, setPasswordData] = useState({ new: "", confirm: "" });
   const [userSettings, setUserSettings] = useState({});
 
-  // 1. Load User & Settings
   useEffect(() => {
-    const unsub = auth.onAuthStateChanged(async (currentUser) => {
-      if (!currentUser) {
+    if (!authLoading) {
+      if (!user) {
         router.push("/login");
         return;
       }
-      setUser(currentUser);
 
-      // Fetch Settings from Firestore
-      try {
-        const ref = doc(db, "users", currentUser.uid);
-        const snap = await getDoc(ref);
-        if (snap.exists()) {
-          setUserSettings(snap.data());
+      const fetchSettings = async () => {
+        try {
+          const res = await fetch(`/api/users/${user.uid}/settings`);
+          if (res.ok) {
+            const data = await res.json();
+            setUserSettings(data);
+          }
+        } catch (err) {
+          toast.error("Failed to load settings.");
+        } finally {
+          setLoading(false);
         }
-      } catch (err) {
-        toast.error("Failed to load settings.");
-      } finally {
-        setLoading(false);
-      }
-    });
-    return () => unsub();
-  }, [router]);
+      };
 
-  // 2. Handle Setting Toggles (Auto-Save)
+      fetchSettings();
+    }
+  }, [user, authLoading, router]);
+
   const toggleSetting = async (category, field) => {
-    // Optimistic UI update
     const newValue = category 
       ? !userSettings[category]?.[field] 
       : !userSettings[field];
@@ -79,58 +58,60 @@ export default function SettingsPage() {
     });
 
     try {
-      const ref = doc(db, "users", user.uid);
-      const updateData = category 
-        ? { [`${category}.${field}`]: newValue }
-        : { [field]: newValue };
-      
-      await updateDoc(ref, updateData);
+      const updateData = category ? { [`${category}.${field}`]: newValue } : { [field]: newValue };
+      await fetch(`/api/users/${user.uid}/settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updateData)
+      });
       toast.success("Setting updated");
     } catch (err) {
       toast.error("Failed to save setting");
-      // Revert on error (optional: reload data)
     }
   };
 
-  // 3. Password Update Handler
   const handleUpdatePassword = async () => {
-    if (passwordData.new.length < 6) {
-      return toast.error("Password must be at least 6 characters");
-    }
-    if (passwordData.new !== passwordData.confirm) {
-      return toast.error("Passwords do not match");
-    }
+    if (passwordData.new.length < 6) return toast.error("Password must be at least 6 characters");
+    if (passwordData.new !== passwordData.confirm) return toast.error("Passwords do not match");
 
     const loadingToast = toast.loading("Updating password...");
     try {
-      await updatePassword(user, passwordData.new);
+      const res = await fetch("/api/auth/update-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.uid, newPassword: passwordData.new })
+      });
+      
+      if (!res.ok) throw new Error("Failed to update password");
+
       toast.dismiss(loadingToast);
       toast.success("Password updated successfully!");
       setPasswordData({ new: "", confirm: "" });
     } catch (err) {
       toast.dismiss(loadingToast);
-      if (err.code === 'auth/requires-recent-login') {
-        toast.error("Please re-login to change password for security.");
-        // Optional: logout user here
-      } else {
-        toast.error(err.message);
-      }
+      toast.error(err.message);
     }
   };
 
-  // 4. Reset Password Email
   const handleResetEmail = async () => {
     try {
-      await sendPasswordResetEmail(auth, user.email);
+      await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: user.email })
+      });
       toast.success(`Reset link sent to ${user.email}`);
     } catch (err) {
       toast.error("Failed to send reset email");
     }
   };
 
-  if (loading) return <div className="mt-40 text-center text-white">Loading settings...</div>;
+  const handleSignOut = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+  };
 
-  // --- Components for Tabs ---
+  if (loading || authLoading) return <div className="mt-40 text-center text-white">Loading settings...</div>;
 
   const SidebarItem = ({ id, label, icon: Icon, danger = false }) => (
     <button
@@ -149,8 +130,6 @@ export default function SettingsPage() {
 
   return (
     <div className="pt-28 pb-20 max-w-6xl mx-auto px-4 flex flex-col md:flex-row gap-8">
-      
-      {/* Left Sidebar */}
       <div className="w-full md:w-64 shrink-0 space-y-2">
         <h1 className="text-2xl font-bold text-white mb-6 px-2">Settings</h1>
         
@@ -164,17 +143,14 @@ export default function SettingsPage() {
         <SidebarItem id="security" label="Login & Security" icon={Lock} />
         
         <button
-          onClick={() => { signOut(auth); router.push("/login"); }}
+          onClick={handleSignOut}
           className="w-full flex items-center gap-3 px-4 py-3 text-red-400 hover:bg-red-900/10 rounded-xl transition-colors"
         >
           <LogOut size={18} /> Sign Out
         </button>
       </div>
 
-      {/* Right Content Area */}
       <div className="flex-1 bg-[#0c0c0f] border border-white/10 rounded-2xl p-6 md:p-8 min-h-[600px]">
-        
-        {/* --- ACCOUNT TAB --- */}
         {activeTab === "account" && (
           <div className="space-y-8 animate-fadeIn">
             <div>
@@ -191,7 +167,7 @@ export default function SettingsPage() {
               
               <div>
                 <Label>Username</Label>
-                <Input disabled value={`@${userSettings.username}`} className="bg-white/5 border-transparent opacity-60" />
+                <Input disabled value={`@${userSettings.username || user.name}`} className="bg-white/5 border-transparent opacity-60" />
               </div>
             </div>
 
@@ -209,7 +185,6 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* --- SECURITY TAB (Password) --- */}
         {activeTab === "security" && (
            <div className="space-y-8 animate-fadeIn">
              <div>
@@ -223,33 +198,22 @@ export default function SettingsPage() {
                <div className="space-y-4">
                  <div>
                    <Label>New Password</Label>
-                   <Input 
-                     type="password" 
-                     value={passwordData.new}
-                     onChange={(e) => setPasswordData(prev => ({...prev, new: e.target.value}))}
-                     placeholder="••••••••"
-                   />
+                   <Input type="password" value={passwordData.new} onChange={(e) => setPasswordData(prev => ({...prev, new: e.target.value}))} placeholder="••••••••" />
                  </div>
                  <div>
                    <Label>Confirm Password</Label>
-                   <Input 
-                     type="password" 
-                     value={passwordData.confirm}
-                     onChange={(e) => setPasswordData(prev => ({...prev, confirm: e.target.value}))}
-                     placeholder="••••••••"
-                   />
+                   <Input type="password" value={passwordData.confirm} onChange={(e) => setPasswordData(prev => ({...prev, confirm: e.target.value}))} placeholder="••••••••" />
                  </div>
                  
                  <div className="flex gap-3 pt-2">
                    <Button onClick={handleUpdatePassword}>Update Password</Button>
-                   <Button variant="outline" onClick={handleResetEmail}>Send Reset Link instead</Button>
+                   <Button variant="outline" onClick={handleResetEmail}>Send Reset Link</Button>
                  </div>
                </div>
              </div>
            </div>
         )}
 
-        {/* --- PRIVACY TAB --- */}
         {activeTab === "privacy" && (
           <div className="space-y-6 animate-fadeIn">
             <div>
@@ -258,43 +222,24 @@ export default function SettingsPage() {
             </div>
 
             <div className="space-y-6 max-w-2xl">
-              {/* Item */}
               <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5">
                 <div>
                   <h4 className="text-white font-medium">Online Status</h4>
                   <p className="text-gray-400 text-sm">Let others see when you are active.</p>
                 </div>
-                <Switch 
-                  checked={userSettings.showOnlineStatus} 
-                  onCheckedChange={() => toggleSetting(null, "showOnlineStatus")} 
-                />
+                <Switch checked={userSettings.showOnlineStatus} onCheckedChange={() => toggleSetting(null, "showOnlineStatus")} />
               </div>
-
-              {/* Item */}
               <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5">
                 <div>
                   <h4 className="text-white font-medium">Read Receipts</h4>
                   <p className="text-gray-400 text-sm">Show when you've read a message.</p>
                 </div>
-                <Switch 
-                  checked={userSettings.readReceipts} 
-                  onCheckedChange={() => toggleSetting(null, "readReceipts")} 
-                />
-              </div>
-
-              {/* Item */}
-              <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5">
-                <div>
-                  <h4 className="text-white font-medium">Search Visibility</h4>
-                  <p className="text-gray-400 text-sm">Allow people to find you by your name or roll number.</p>
-                </div>
-                <Switch defaultChecked disabled /> 
+                <Switch checked={userSettings.readReceipts} onCheckedChange={() => toggleSetting(null, "readReceipts")} />
               </div>
             </div>
           </div>
         )}
 
-        {/* --- NOTIFICATIONS TAB --- */}
         {activeTab === "notifications" && (
           <div className="space-y-6 animate-fadeIn">
             <div>
@@ -303,7 +248,6 @@ export default function SettingsPage() {
             </div>
 
             <div className="space-y-1 max-w-2xl">
-              {/* Helper function for notification items */}
               {[
                 { id: "messages", label: "Direct Messages", desc: "New messages from your connections" },
                 { id: "mentions", label: "Mentions & Tags", desc: "When someone tags you in a post or comment" },
@@ -315,17 +259,13 @@ export default function SettingsPage() {
                     <h4 className="text-white font-medium">{item.label}</h4>
                     <p className="text-gray-400 text-sm">{item.desc}</p>
                   </div>
-                  <Switch 
-                    checked={userSettings.notifications?.[item.id]} 
-                    onCheckedChange={() => toggleSetting("notifications", item.id)} 
-                  />
+                  <Switch checked={userSettings.notifications?.[item.id]} onCheckedChange={() => toggleSetting("notifications", item.id)} />
                 </div>
               ))}
             </div>
           </div>
         )}
 
-         {/* --- DISPLAY TAB --- */}
          {activeTab === "display" && (
           <div className="space-y-6 animate-fadeIn">
             <div>
@@ -337,7 +277,7 @@ export default function SettingsPage() {
                {['system', 'dark', 'light'].map((theme) => (
                  <button
                    key={theme}
-                   onClick={() => toggleSetting(null, "theme")} // Ideally this needs logic to set specific value
+                   onClick={() => toggleSetting(null, "theme")} 
                    className={`p-4 rounded-xl border text-center capitalize transition-all ${
                      userSettings.theme === theme 
                       ? "bg-blue-600/20 border-blue-500 text-white" 
@@ -348,10 +288,9 @@ export default function SettingsPage() {
                  </button>
                ))}
             </div>
-            <p className="text-gray-500 text-xs mt-2">*Currently locked to Dark Mode by Ryze System Default.</p>
+            <p className="text-gray-500 text-xs mt-2">*Currently locked to Dark Mode by SpectraY System Default.</p>
           </div>
         )}
-
       </div>
     </div>
   );
