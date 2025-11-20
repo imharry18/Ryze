@@ -1,4 +1,3 @@
-// src/components/upload/PostUploadForm.jsx
 "use client";
 import React, { useRef, useState, useEffect } from "react";
 import useUpload from "@/hooks/useUpload";
@@ -9,82 +8,148 @@ import { useAuth } from "@/hooks/useAuth";
 export default function PostUploadForm({ onClose }) {
   const { user } = useAuth();
   const fileRef = useRef(null);
+  
   const [file, setFile] = useState(null);
-  const [previewURL, setPreviewURL] = useState("");
+  const [previewURL, setPreviewURL] = useState(""); 
+  
   const [caption, setCaption] = useState("");
   const [postType, setPostType] = useState("post");
 
-  const { upload, progress, uploading, error, successId, reset } = useUpload();
+  const { upload, progress, uploading, error, reset } = useUpload();
 
+  // 1. CLEANUP EFFECT ONLY
+  // We no longer set state here. We only revoke the URL when the component unmounts 
+  // or when the previewURL changes (cleaning up the old one).
   useEffect(() => {
-    if (!file) { setPreviewURL(""); return; }
-    const url = URL.createObjectURL(file);
-    setPreviewURL(url);
-    return () => URL.revokeObjectURL(url);
-  }, [file]);
+    return () => {
+      if (previewURL) {
+        URL.revokeObjectURL(previewURL);
+      }
+    };
+  }, [previewURL]);
 
   const handleFile = (e) => {
     const f = e.target.files?.[0];
-    if (!f) return;
+    
+    // Handle reset if user cancels file picker
+    if (!f) {
+        setFile(null);
+        setPreviewURL("");
+        return;
+    }
+
     if (!f.type.startsWith("image/")) {
       alert("Please pick an image.");
       return;
     }
+
+    // 2. GENERATE URL IMMEDIATELY HERE
+    // This prevents the "setState in useEffect" error loop
+    const url = URL.createObjectURL(f);
     setFile(f);
+    setPreviewURL(url);
   };
 
   const startUpload = async () => {
     if (!user) return alert("Login required");
     if (!file) return alert("Select an image");
+    
     try {
       await upload({ uid: user.uid, file, mediaType: "image", caption, postType });
-      // success
       reset();
       onClose?.();
     } catch (e) {
-      // error handled by hook
+      console.error(e);
     }
   };
 
   return (
-    <div className="flex gap-6">
-      <div className="w-1/2 bg-black/60 p-4 flex items-center justify-center">
+    <div className="flex flex-col md:flex-row gap-6 p-4 min-h-[400px]">
+      {/* Left: Media */}
+      <div className="w-full md:w-1/2 bg-black/60 rounded-xl border border-white/10 flex items-center justify-center overflow-hidden relative group">
         {previewURL ? (
-          <MediaPreview previewURL={previewURL} fileType={file?.type} />
+          <div className="relative w-full h-full flex items-center justify-center bg-black">
+             <MediaPreview previewURL={previewURL} fileType={file?.type} />
+             <button 
+               onClick={() => { 
+                 setFile(null); 
+                 setPreviewURL(""); 
+                 fileRef.current.value = ""; 
+               }}
+               className="absolute top-2 right-2 bg-black/50 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition"
+             >
+                ✕
+             </button>
+          </div>
         ) : (
-          <div className="text-center text-gray-400">
-            <p>Select an image</p>
-            <input ref={fileRef} type="file" accept="image/*" onChange={handleFile} className="mt-3" />
+          <div className="text-center text-gray-400 p-6">
+            <p className="mb-3 text-lg font-medium text-white">Select Photo</p>
+            <input ref={fileRef} type="file" accept="image/*" onChange={handleFile} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer" />
           </div>
         )}
       </div>
 
-      <div className="w-1/2 p-4 flex flex-col">
-        <h3 className="text-lg font-semibold">Create Post</h3>
-        <textarea value={caption} onChange={(e)=>setCaption(e.target.value)} placeholder="Write a caption..." className="mt-3 p-2 bg-white/5 rounded h-32 resize-none" />
-        <div className="mt-3">
-          <label className="text-sm">Post type</label>
-          <div className="flex gap-2 mt-2">
-            <button className={`px-3 py-1 rounded ${postType==="post"?"bg-blue-600 text-white":""}`} onClick={()=>setPostType("post")}>Post</button>
-            <button className={`px-3 py-1 rounded ${postType==="event"?"bg-blue-600 text-white":""}`} onClick={()=>setPostType("event")}>Event</button>
-          </div>
+      {/* Right: Details */}
+      <div className="w-full md:w-1/2 flex flex-col">
+        <h3 className="text-xl font-semibold text-white mb-4">New Post</h3>
+        
+        <div className="space-y-4 flex-1">
+            <div>
+                <label className="text-sm text-gray-400 mb-1 block">Caption</label>
+                <textarea 
+                    value={caption} 
+                    onChange={(e)=>setCaption(e.target.value)} 
+                    placeholder="Write a caption..." 
+                    className="w-full p-3 bg-white/5 border border-white/10 rounded-lg h-32 resize-none focus:outline-none focus:border-blue-500 text-white transition" 
+                />
+            </div>
+            
+            <div>
+                <label className="text-sm text-gray-400 mb-2 block">Post type</label>
+                <div className="flex gap-3">
+                    <button 
+                        className={`flex-1 py-2 rounded-lg border transition ${postType==="post" ? "bg-blue-600 border-blue-600 text-white" : "border-white/20 text-gray-400 hover:border-white/40"}`} 
+                        onClick={()=>setPostType("post")}
+                    >
+                        Standard Post
+                    </button>
+                    <button 
+                        className={`flex-1 py-2 rounded-lg border transition ${postType==="event" ? "bg-purple-600 border-purple-600 text-white" : "border-white/20 text-gray-400 hover:border-white/40"}`} 
+                        onClick={()=>setPostType("event")}
+                    >
+                        Event
+                    </button>
+                </div>
+            </div>
         </div>
 
-        {error && <p className="text-red-400 mt-2">{error}</p>}
+        {error && (
+            <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-lg text-sm mt-4">
+                {error}
+            </div>
+        )}
 
-        <div className="mt-auto">
+        <div className="mt-6 pt-4 border-t border-white/10">
           {uploading && (
-            <div className="mb-2">
-              <div className="w-full bg-gray-800 h-2 rounded">
-                <div className="h-2 bg-blue-500" style={{width: `${progress}%`}} />
+            <div className="mb-4">
+              <div className="flex justify-between text-xs text-blue-400 mb-1">
+                 <span>{progress === 0 ? "Preparing..." : "Uploading..."}</span>
+                 <span>{progress}%</span>
               </div>
-              <p className="text-xs text-gray-300 mt-1">{progress}%</p>
+              <div className="w-full bg-gray-800 h-1.5 rounded-full overflow-hidden">
+                <div 
+                    className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-300 ease-out" 
+                    style={{width: `${Math.max(5, progress)}%`}} 
+                />
+              </div>
             </div>
           )}
 
-          <div className="flex gap-2 justify-end">
-            <Button variant="outline" onClick={() => { reset(); onClose?.(); }}>Cancel</Button>
-            <Button onClick={startUpload} disabled={uploading}>Upload</Button>
+          <div className="flex gap-3 justify-end">
+            <Button variant="ghost" onClick={onClose} disabled={uploading}>Cancel</Button>
+            <Button onClick={startUpload} disabled={uploading || !file} className="min-w-[100px]">
+                {uploading ? "Processing..." : "Share"}
+            </Button>
           </div>
         </div>
       </div>

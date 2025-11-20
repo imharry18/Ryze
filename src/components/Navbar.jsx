@@ -12,9 +12,11 @@ import {
   User,
   Settings,
   LogOut,
+  Bell // Import Bell icon
 } from "lucide-react";
 
 import { useAuth } from "@/hooks/useAuth";
+import { useNotifications } from "@/hooks/useNotifications"; // Import the new hook
 import { auth } from "@/lib/firebase";
 import { signOut } from "firebase/auth";
 
@@ -25,7 +27,9 @@ import { Button } from "./ui/Button";
 
 export default function Navbar() {
 
-  const { user, loading } = useAuth(); // NOW PROPER LOADING SUPPORT
+  const { user, loading } = useAuth();
+  // Fetch notification count
+  const { requestCount } = useNotifications(user?.uid); 
 
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isAccountMenu, setIsAccountMenu] = useState(false);
@@ -45,9 +49,6 @@ export default function Navbar() {
     { href: "/events", label: "Events" },
   ];
 
-  // ------------------------------------
-  // 🔥 FIX: do NOT render anything until auth loads
-  // ------------------------------------
   if (loading) {
     return (
       <nav className="w-full fixed top-0 left-0 z-50 bg-black/60 backdrop-blur-xl border-b border-white/10 shadow-lg">
@@ -124,6 +125,18 @@ export default function Navbar() {
               </Link>
             )}
 
+            {/* NOTIFICATIONS (New) */}
+            {user && (
+                <Link href="/dashboard" className="relative">
+                    <Bell className="h-7 w-7 text-white hover:text-yellow-400 cursor-pointer transition active:scale-90" />
+                    {requestCount > 0 && (
+                        <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] font-bold h-5 w-5 flex items-center justify-center rounded-full border-2 border-black">
+                            {requestCount}
+                        </span>
+                    )}
+                </Link>
+            )}
+
             {/* ACCOUNT */}
             {user && (
               <div className="relative">
@@ -136,7 +149,7 @@ export default function Navbar() {
                 />
 
                 {isAccountMenu && (
-                  <div className="absolute right-0 mt-3 bg-black/90 text-white w-44 rounded-xl shadow-lg border border-white/10 backdrop-blur-xl p-2 z-50">
+                  <div className="absolute right-0 mt-3 bg-black/90 text-white w-44 rounded-xl shadow-lg border border-white/10 backdrop-blur-xl p-2 z-50 animate-fadeIn">
                     <Link
                       href="/my-account"
                       className="flex items-center gap-3 px-3 py-2 hover:bg-white/10 rounded-lg"
@@ -179,9 +192,12 @@ export default function Navbar() {
 
           {/* MOBILE MENU */}
           <button
-            className="md:hidden text-white"
+            className="md:hidden text-white relative"
             onClick={() => setIsMobileOpen(!isMobileOpen)}
           >
+            {requestCount > 0 && (
+                 <span className="absolute top-0 right-0 bg-red-600 h-3 w-3 rounded-full border-2 border-black"></span>
+            )}
             {isMobileOpen ? <X size={28} /> : <Menu size={28} />}
           </button>
 
