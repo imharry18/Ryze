@@ -22,6 +22,7 @@ import {
   SelectValue,
   SelectContent,
 } from "@/components/ui/Select";
+import { toast } from "sonner"; // Assuming you installed sonner as discussed
 
 // Data
 import { colleges } from "@/data/Colleges.js";
@@ -38,7 +39,6 @@ export default function RegisterPage() {
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
-  const [message, setMessage] = useState({ type: "", text: "" });
 
   const form = useForm({
     resolver: zodResolver(registerSchema),
@@ -56,39 +56,37 @@ export default function RegisterPage() {
   const { register, handleSubmit, setValue, trigger, formState: { errors } } = form;
 
   // -------------------------
-  // 🔥 Handle Submit using registerUser.js
+  // Handle Submit
   // -------------------------
   async function onSubmit(values) {
     setIsLoading(true);
-    setMessage({ type: "", text: "" });
 
+    // The action will handle username generation internally
     const result = await registerUser(values);
 
     if (!result.success) {
       const error = result.error;
-
       if (error.code === "auth/email-already-in-use") {
-        setMessage({ type: "error", text: "This email is already registered." });
-      } else if (error.code === "auth/invalid-email") {
-        setMessage({ type: "error", text: "Invalid email address." });
+        toast.error("This email is already registered.");
+        setStep(1); // Go back if email is bad
       } else if (error.code === "auth/weak-password") {
-        setMessage({ type: "error", text: "Password must be at least 6 characters." });
+        toast.error("Password must be at least 6 characters.");
+        setStep(1);
+      } else if (error.code === "permission-denied") {
+         toast.error("Database permission denied. Please check Firebase rules.");
       } else {
-        setMessage({ type: "error", text: "Something went wrong. Try again." });
+        toast.error(error.message || "Something went wrong.");
       }
-
       setIsLoading(false);
       return;
     }
 
     // SUCCESS
-    setMessage({ type: "success", text: "Account created! Redirecting..." });
-
+    toast.success("Account created! Redirecting...");
+    
     setTimeout(() => {
       router.push("/dashboard");
-    }, 1000);
-
-    setIsLoading(false);
+    }, 1500);
   }
 
   // -------------------------
@@ -131,21 +129,10 @@ export default function RegisterPage() {
           {step === 1 ? "Create Your Account" : "College Details"}
         </h1>
 
-        {/* Message */}
-        {message.text && (
-          <div className={`p-3 rounded-md text-center mb-4 text-sm ${
-            message.type === "success"
-              ? "bg-green-600/20 text-green-300 border border-green-600/30"
-              : "bg-red-600/20 text-red-300 border border-red-600/30"
-          }`}>
-            {message.text}
-          </div>
-        )}
-
         {/* ----------------------- FORM ----------------------- */}
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
 
-          {/* STEP 1 */}
+          {/* STEP 1: Basic Info */}
           {step === 1 && (
             <>
               <div>
@@ -153,6 +140,8 @@ export default function RegisterPage() {
                 <Input {...register("name")} placeholder="Enter your full name" />
                 <p className="text-red-400 text-sm mt-1">{errors.name?.message}</p>
               </div>
+
+              {/* Username Field REMOVED */}
 
               <div>
                 <Label>Email</Label>
@@ -172,7 +161,7 @@ export default function RegisterPage() {
             </>
           )}
 
-          {/* STEP 2 */}
+          {/* STEP 2: College Info */}
           {step === 2 && (
             <>
               <div>
@@ -217,7 +206,8 @@ export default function RegisterPage() {
 
               <div>
                 <Label>Roll No</Label>
-                <Input {...register("rollNo")} placeholder="Enter your roll number" />
+                {/* Updated Placeholder */}
+                <Input {...register("rollNo")} placeholder="2201015" />
                 <p className="text-red-400 text-sm mt-1">{errors.rollNo?.message}</p>
               </div>
 
