@@ -1,27 +1,23 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { doc, onSnapshot } from "firebase/firestore";
+import { signOut } from "firebase/auth";
 
 import {
   Menu,
   X,
-  PlusCircle,
-  MessageSquare,
   User,
   Settings,
   LogOut,
-  Bell // Import Bell icon
+  Bell
 } from "lucide-react";
 
 import { useAuth } from "@/hooks/useAuth";
-import { useNotifications } from "@/hooks/useNotifications"; // Import the new hook
-import { auth } from "@/lib/firebase";
-import { signOut } from "firebase/auth";
-
-import UploadMenu from "@/components/layout/UploadMenu";
-import UploadModal from "@/components/upload/UploadModal";
+import { useNotifications } from "@/hooks/useNotifications";
+import { auth, db } from "@/lib/firebase";
 
 import { Button } from "./ui/Button";
 
@@ -33,185 +29,154 @@ export default function Navbar() {
 
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isAccountMenu, setIsAccountMenu] = useState(false);
-  const [isUploadMenu, setIsUploadMenu] = useState(false);
-  const [uploadType, setUploadType] = useState(null);
-  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  
+  // State for Firestore Profile Data
+  const [profile, setProfile] = useState(null);
+
+  // Fetch Firestore Profile (Username & DP) Realtime
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    const unsub = onSnapshot(doc(db, "users", user.uid), (docSnap) => {
+      if (docSnap.exists()) {
+        setProfile(docSnap.data());
+      }
+    });
+
+    return () => unsub();
+  }, [user]);
 
   const handleLogout = async () => {
     await signOut(auth);
     window.location.href = "/login";
   };
 
-  const navLinks = [
-    { href: "/", label: "Home" },
-    { href: "/hot-ryze", label: "HotRyze" },
-    { href: "/search", label: "Search" },
-    { href: "/events", label: "Events" },
-  ];
-
   if (loading) {
     return (
-      <nav className="w-full fixed top-0 left-0 z-50 bg-black/60 backdrop-blur-xl border-b border-white/10 shadow-lg">
+      <nav className="w-full fixed top-0 left-0 z-50 bg-black/80 backdrop-blur-xl border-b border-white/10 shadow-lg">
         <div className="max-w-7xl mx-auto flex items-center justify-between px-4 py-3">
-          <div className="text-white/60">Loading...</div>
+          {/* Minimal Loading State */}
         </div>
       </nav>
     );
   }
 
   return (
-    <>
-      <nav className="w-full fixed top-0 left-0 z-50 bg-black/60 backdrop-blur-xl border-b border-white/10 shadow-lg">
-        <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 py-3">
+    <nav className="w-full fixed top-0 left-0 z-50 bg-black/80 backdrop-blur-xl border-b border-white/10 shadow-md">
+      <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 py-3">
 
-          {/* LOGO */}
-          <Link href="/" className="flex items-center gap-2">
-            <Image
-              src="/logo.png"
-              alt="RYZE Logo"
-              width={40}
-              height={40}
-              className="h-8 w-auto brightness-110"
-            />
-            <span className="text-2xl font-bold text-white tracking-wide">
-              RYZE
-            </span>
-          </Link>
+        {/* LEFT: LOGO */}
+        <Link href="/" className="flex items-center gap-3">
+          <Image
+            src="/logo.png"
+            alt="RYZE Logo"
+            width={32}
+            height={32}
+            className="h-8 w-auto brightness-110"
+          />
+          <span className="text-xl font-bold text-white tracking-wider">
+            RYZE
+          </span>
+        </Link>
 
-          {/* CENTER LINKS */}
-          <div className="hidden md:flex items-center gap-8">
-            {navLinks.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="text-white/70 hover:text-white text-sm font-medium transition-all hover:scale-110"
-              >
-                {item.label}
+        {/* RIGHT: ACTIONS */}
+        <div className="flex items-center gap-4">
+
+          {user ? (
+            <>
+              {/* 1. Notifications */}
+              <Link href="/dashboard" className="relative group">
+                  <div className="p-2 text-gray-300 hover:text-white hover:bg-white/10 rounded-full transition">
+                      <Bell size={22} />
+                  </div>
+                  {requestCount > 0 && (
+                      <span className="absolute top-1 right-1 bg-red-600 text-white text-[10px] font-bold h-4 w-4 flex items-center justify-center rounded-full border-2 border-black">
+                          {requestCount}
+                      </span>
+                  )}
               </Link>
-            ))}
-          </div>
 
-          {/* RIGHT SIDE */}
-          <div className="hidden md:flex items-center gap-6">
-
-            {/* UPLOAD */}
-            {user && (
+              {/* 2. Profile & Username */}
               <div className="relative">
-                <PlusCircle
-                  className="h-7 w-7 text-white hover:text-blue-400 cursor-pointer transition active:scale-90"
-                  onClick={() => {
-                    setIsUploadMenu(!isUploadMenu);
-                    setIsAccountMenu(false);
-                  }}
-                />
+                <div 
+                  className="flex items-center gap-3 cursor-pointer p-1 pr-4 rounded-full hover:bg-white/10 transition border border-transparent hover:border-white/10"
+                  onClick={() => setIsAccountMenu(!isAccountMenu)}
+                >
+                  <div className="relative h-8 w-8 rounded-full overflow-hidden border border-white/20 bg-gray-800">
+                      <Image 
+                          // Priority: Firestore DP -> Auth Photo -> Default
+                          src={profile?.dp || user.photoURL || "/default-dp.png"} 
+                          alt="Profile" 
+                          fill 
+                          className="object-cover"
+                      />
+                  </div>
+                  <span className="hidden md:block text-sm font-bold text-white max-w-[150px] truncate">
+                      {/* Priority: Firestore Username -> Auth DisplayName -> Fallback */}
+                      {profile?.username || user.displayName || "User"}
+                  </span>
+                </div>
 
-                {isUploadMenu && (
-                  <UploadMenu
-                    close={() => setIsUploadMenu(false)}
-                    openModal={(type) => {
-                      setUploadType(type);
-                      setIsUploadMenu(false);
-                      setIsUploadModalOpen(true);
-                    }}
-                  />
-                )}
-              </div>
-            )}
-
-            {/* MESSAGES */}
-            {user && (
-              <Link href="/messages">
-                <MessageSquare className="h-7 w-7 text-white hover:text-purple-400 cursor-pointer transition active:scale-90" />
-              </Link>
-            )}
-
-            {/* NOTIFICATIONS (New) */}
-            {user && (
-                <Link href="/dashboard" className="relative">
-                    <Bell className="h-7 w-7 text-white hover:text-yellow-400 cursor-pointer transition active:scale-90" />
-                    {requestCount > 0 && (
-                        <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] font-bold h-5 w-5 flex items-center justify-center rounded-full border-2 border-black">
-                            {requestCount}
-                        </span>
-                    )}
-                </Link>
-            )}
-
-            {/* ACCOUNT */}
-            {user && (
-              <div className="relative">
-                <User
-                  className="h-7 w-7 text-white hover:text-green-400 cursor-pointer transition active:scale-90"
-                  onClick={() => {
-                    setIsAccountMenu(!isAccountMenu);
-                    setIsUploadMenu(false);
-                  }}
-                />
-
+                {/* Account Dropdown */}
                 {isAccountMenu && (
-                  <div className="absolute right-0 mt-3 bg-black/90 text-white w-44 rounded-xl shadow-lg border border-white/10 backdrop-blur-xl p-2 z-50 animate-fadeIn">
+                  <div className="absolute right-0 mt-2 bg-[#121212] text-white w-56 rounded-xl shadow-2xl border border-white/10 backdrop-blur-xl py-2 z-50 animate-fadeIn">
+                    <div className="px-4 py-3 border-b border-white/10 mb-2">
+                      <p className="text-sm font-bold text-white">
+                        @{profile?.username || "username"}
+                      </p>
+                      <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                    </div>
+
                     <Link
-                      href="/my-account"
-                      className="flex items-center gap-3 px-3 py-2 hover:bg-white/10 rounded-lg"
+                      href="/profile"
+                      className="flex items-center gap-3 px-4 py-2.5 hover:bg-white/5 text-sm text-gray-300 hover:text-white transition"
                       onClick={() => setIsAccountMenu(false)}
                     >
-                      <User className="h-4 w-4" /> My Account
+                      <User size={16} /> My Profile
                     </Link>
 
                     <Link
                       href="/settings"
-                      className="flex items-center gap-3 px-3 py-2 hover:bg-white/10 rounded-lg"
+                      className="flex items-center gap-3 px-4 py-2.5 hover:bg-white/5 text-sm text-gray-300 hover:text-white transition"
                       onClick={() => setIsAccountMenu(false)}
                     >
-                      <Settings className="h-4 w-4" /> Settings
+                      <Settings size={16} /> Settings
                     </Link>
+
+                    <div className="h-px bg-white/10 my-2" />
 
                     <button
                       onClick={handleLogout}
-                      className="flex items-center gap-3 px-3 py-2 w-full text-left hover:bg-red-800/20 text-red-400 rounded-lg"
+                      className="flex items-center gap-3 px-4 py-2.5 w-full text-left hover:bg-red-500/10 text-red-400 transition text-sm"
                     >
-                      <LogOut className="h-4 w-4" /> Sign Out
+                      <LogOut size={16} /> Sign Out
                     </button>
                   </div>
                 )}
               </div>
-            )}
+            </>
+          ) : (
+            /* LOGGED OUT STATE */
+            <div className="flex items-center gap-3">
+              <Link href="/login" className="text-sm font-medium text-gray-300 hover:text-white transition px-2">
+                Log In
+              </Link>
+              <Button asChild size="sm" className="bg-blue-600 hover:bg-blue-500 text-white rounded-full px-6">
+                <Link href="/register">Sign Up</Link>
+              </Button>
+            </div>
+          )}
 
-            {/* NOT LOGGED IN */}
-            {!user && (
-              <>
-                <Button asChild variant="outline" className="text-white">
-                  <Link href="/login">Login</Link>
-                </Button>
-                <Button asChild>
-                  <Link href="/register">Register</Link>
-                </Button>
-              </>
-            )}
-          </div>
-
-          {/* MOBILE MENU */}
+          {/* MOBILE MENU TOGGLE */}
           <button
-            className="md:hidden text-white relative"
+            className="md:hidden text-white ml-2"
             onClick={() => setIsMobileOpen(!isMobileOpen)}
           >
-            {requestCount > 0 && (
-                 <span className="absolute top-0 right-0 bg-red-600 h-3 w-3 rounded-full border-2 border-black"></span>
-            )}
-            {isMobileOpen ? <X size={28} /> : <Menu size={28} />}
+            {isMobileOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
 
         </div>
-      </nav>
-
-      {/* UPLOAD MODAL */}
-      {isUploadModalOpen && (
-        <UploadModal
-          uploadType={uploadType}
-          isOpen={isUploadModalOpen}
-          onClose={() => setIsUploadModalOpen(false)}
-        />
-      )}
-    </>
+      </div>
+    </nav>
   );
 }

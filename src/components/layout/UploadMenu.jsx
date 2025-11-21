@@ -3,22 +3,32 @@
 import React from "react";
 import { Image as ImageIcon, Video } from "lucide-react";
 
-export default function UploadMenu({ close, openModal }) {
+export default function UploadMenu({ close, openModal, className = "" }) {
   return (
     <div
-      className="absolute right-0 mt-3 bg-black/90 text-white w-44 rounded-xl shadow-lg
-                 border border-white/10 backdrop-blur-xl p-2 z-50 animate-fadeIn"
+      className={`
+        bg-[#18181b] text-white w-48 rounded-xl shadow-2xl border border-white/10 
+        backdrop-blur-xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-200
+        ${className}
+      `}
     >
+      {/* Header */}
+      <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-white/5 mb-1">
+        Create
+      </div>
+
       {/* Upload Post */}
       <button
         onClick={() => {
           close();
           openModal("post");
         }}
-        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/10 transition"
+        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/10 transition group"
       >
-        <ImageIcon className="h-5 w-5" />
-        <span>Upload Post</span>
+        <div className="p-1.5 rounded-md bg-blue-500/10 text-blue-400 group-hover:bg-blue-500 group-hover:text-white transition">
+            <ImageIcon className="h-4 w-4" />
+        </div>
+        <span className="text-sm font-medium">Post</span>
       </button>
 
       {/* Upload Reel */}
@@ -27,10 +37,12 @@ export default function UploadMenu({ close, openModal }) {
           close();
           openModal("reel");
         }}
-        className="w-full flex items-center gap-3 px-3 py-2 mt-1 rounded-lg hover:bg-white/10 transition"
+        className="w-full flex items-center gap-3 px-3 py-2.5 mt-1 rounded-lg hover:bg-white/10 transition group"
       >
-        <Video className="h-5 w-5" />
-        <span>Upload Reel</span>
+        <div className="p-1.5 rounded-md bg-purple-500/10 text-purple-400 group-hover:bg-purple-500 group-hover:text-white transition">
+            <Video className="h-4 w-4" />
+        </div>
+        <span className="text-sm font-medium">Reel</span>
       </button>
     </div>
   );

@@ -1,4 +1,4 @@
-// src/lib/uploadPost.js
+// src/lib/uploadPost.jsx
 import {
   ref as storageRef,
   uploadBytesResumable,
@@ -13,9 +13,6 @@ import {
   updateDoc
 } from "firebase/firestore";
 
-/**
- * Upload file to storage and create post doc in Firestore.
- */
 export async function uploadPostAndMedia({
   storage,
   db,
@@ -23,13 +20,12 @@ export async function uploadPostAndMedia({
   file,
   mediaType,
   caption = "",
+  location = "", // New Parameter
   postType = "post",
   onProgress = () => {},
 }) {
   console.log("Step 1: Starting Post Creation...");
   
-  // 1. Create post doc (so we have an id)
-  // We initialize mediaURL as null first.
   const postsCol = collection(db, "posts");
   
   let newPostRef;
@@ -37,13 +33,14 @@ export async function uploadPostAndMedia({
     newPostRef = await addDoc(postsCol, {
       userId: uid,
       caption,
+      location, // Save Location
       postType,
       mediaType,
       createdAt: serverTimestamp(),
       likesCount: 0,
       commentsCount: 0,
-      mediaURL: null, // Placeholder
-      processing: true // Flag to hide it until upload finishes
+      mediaURL: null, 
+      processing: true 
     });
   } catch (dbError) {
     console.error("Firestore Create Error:", dbError);
@@ -53,7 +50,6 @@ export async function uploadPostAndMedia({
   const postId = newPostRef.id;
   console.log("Step 2: Post Record Created with ID:", postId);
 
-  // 2. Upload file to storage at posts/{uid}/{postId}/{filename}
   const ext = file.name.split(".").pop();
   const filename = `${Date.now()}.${ext}`;
   const stPath = `posts/${uid}/${postId}/${filename}`;
@@ -67,13 +63,10 @@ export async function uploadPostAndMedia({
       "state_changed",
       (snapshot) => {
         const prog = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-        console.log(`Upload Progress: ${prog}%`);
         onProgress(prog);
       },
       (err) => {
         console.error("Storage Upload Error:", err);
-        // Try to clean up the empty doc if upload fails
-        // deleteDoc(newPostRef).catch(() => {}); 
         reject(new Error("File upload failed."));
       },
       async () => {
@@ -82,20 +75,16 @@ export async function uploadPostAndMedia({
           const url = await getDownloadURL(uploadTask.snapshot.ref);
           
           console.log("Step 5: Updating Post with URL...");
-          // 3. Update post doc with media URL + storage path
           await updateDoc(
             doc(db, "posts", postId),
             {
               mediaURL: url,
               mediaStoragePath: stPath,
               updatedAt: serverTimestamp(),
-              processing: false // Show post now
+              processing: false 
             }
           );
 
-          console.log("Step 6: Linking to User Profile...");
-          // 4. Create userPosts quick index
-          // Note: Ensure you have permission to write to this collection
           try {
               await setDoc(doc(db, "userPosts", uid, "posts", postId), {
                 createdAt: serverTimestamp(),

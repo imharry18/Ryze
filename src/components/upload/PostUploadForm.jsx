@@ -1,9 +1,12 @@
+// src/components/upload/PostUploadForm.jsx
 "use client";
 import React, { useRef, useState, useEffect } from "react";
 import useUpload from "@/hooks/useUpload";
 import MediaPreview from "./MediaPreview";
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input"; // Import Input component
 import { useAuth } from "@/hooks/useAuth";
+import { MapPin } from "lucide-react";
 
 export default function PostUploadForm({ onClose }) {
   const { user } = useAuth();
@@ -13,13 +16,11 @@ export default function PostUploadForm({ onClose }) {
   const [previewURL, setPreviewURL] = useState(""); 
   
   const [caption, setCaption] = useState("");
+  const [location, setLocation] = useState(""); // New State
   const [postType, setPostType] = useState("post");
 
   const { upload, progress, uploading, error, reset } = useUpload();
 
-  // 1. CLEANUP EFFECT ONLY
-  // We no longer set state here. We only revoke the URL when the component unmounts 
-  // or when the previewURL changes (cleaning up the old one).
   useEffect(() => {
     return () => {
       if (previewURL) {
@@ -30,21 +31,15 @@ export default function PostUploadForm({ onClose }) {
 
   const handleFile = (e) => {
     const f = e.target.files?.[0];
-    
-    // Handle reset if user cancels file picker
     if (!f) {
         setFile(null);
         setPreviewURL("");
         return;
     }
-
     if (!f.type.startsWith("image/")) {
       alert("Please pick an image.");
       return;
     }
-
-    // 2. GENERATE URL IMMEDIATELY HERE
-    // This prevents the "setState in useEffect" error loop
     const url = URL.createObjectURL(f);
     setFile(f);
     setPreviewURL(url);
@@ -55,7 +50,8 @@ export default function PostUploadForm({ onClose }) {
     if (!file) return alert("Select an image");
     
     try {
-      await upload({ uid: user.uid, file, mediaType: "image", caption, postType });
+      // Pass location here
+      await upload({ uid: user.uid, file, mediaType: "image", caption, location, postType });
       reset();
       onClose?.();
     } catch (e) {
@@ -100,8 +96,22 @@ export default function PostUploadForm({ onClose }) {
                     value={caption} 
                     onChange={(e)=>setCaption(e.target.value)} 
                     placeholder="Write a caption..." 
-                    className="w-full p-3 bg-white/5 border border-white/10 rounded-lg h-32 resize-none focus:outline-none focus:border-blue-500 text-white transition" 
+                    className="w-full p-3 bg-white/5 border border-white/10 rounded-lg h-24 resize-none focus:outline-none focus:border-blue-500 text-white transition" 
                 />
+            </div>
+
+            {/* Location Input */}
+            <div>
+                <label className="text-sm text-gray-400 mb-1 block">Add Location</label>
+                <div className="relative">
+                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+                    <Input 
+                        value={location} 
+                        onChange={(e)=>setLocation(e.target.value)} 
+                        placeholder="Nagpur, India" 
+                        className="pl-9 bg-white/5 border-white/10" 
+                    />
+                </div>
             </div>
             
             <div>

@@ -3,7 +3,9 @@ import React, { useRef, useState, useEffect } from "react";
 import useUpload from "@/hooks/useUpload";
 import MediaPreview from "./MediaPreview";
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input"; // Import Input
 import { useAuth } from "@/hooks/useAuth";
+import { MapPin } from "lucide-react"; // Import MapPin
 
 export default function ReelUploadForm({ onClose }) {
   const { user } = useAuth();
@@ -13,14 +15,12 @@ export default function ReelUploadForm({ onClose }) {
   const [previewURL, setPreviewURL] = useState(""); 
   
   const [caption, setCaption] = useState("");
+  const [location, setLocation] = useState(""); // New State
   const [postType, setPostType] = useState("post");
   const [videoError, setVideoError] = useState("");
 
   const { upload, progress, uploading, error, reset } = useUpload();
 
-  // 1. CLEANUP EFFECT ONLY
-  // We no longer set state here. We only revoke the URL when the component unmounts 
-  // or when the previewURL changes (cleaning up the old one).
   useEffect(() => {
     return () => {
       if (previewURL) {
@@ -32,7 +32,6 @@ export default function ReelUploadForm({ onClose }) {
   const handleFile = (e) => {
     const f = e.target.files?.[0];
     
-    // Reset if cancel or no file
     if (!f) {
        setFile(null);
        setPreviewURL("");
@@ -44,24 +43,22 @@ export default function ReelUploadForm({ onClose }) {
       return;
     }
 
-    // Generate URL immediately here to avoid cascading renders
     const url = URL.createObjectURL(f);
 
-    // Check Duration
     const vid = document.createElement("video");
     vid.preload = "metadata";
-    vid.src = url; // Use the url we just created
+    vid.src = url; 
 
     vid.onloadedmetadata = () => {
       if (vid.duration > 60) {
         setVideoError("Video must be under 60 seconds.");
-        URL.revokeObjectURL(url); // Invalid, clean it up immediately
+        URL.revokeObjectURL(url); 
         setFile(null);
         setPreviewURL("");
       } else {
         setVideoError("");
         setFile(f);
-        setPreviewURL(url); // Set state here directly!
+        setPreviewURL(url); 
       }
     };
 
@@ -77,7 +74,8 @@ export default function ReelUploadForm({ onClose }) {
     if (videoError) return;
 
     try {
-      await upload({ uid: user.uid, file, mediaType: "video", caption, postType });
+      // Pass location to upload function
+      await upload({ uid: user.uid, file, mediaType: "video", caption, location, postType });
       reset();
       onClose?.();
     } catch (e) {
@@ -117,12 +115,29 @@ export default function ReelUploadForm({ onClose }) {
         <h3 className="text-xl font-semibold text-white mb-4">New Reel</h3>
         
         <div className="space-y-4 flex-1">
-            <textarea 
-                value={caption} 
-                onChange={(e)=>setCaption(e.target.value)} 
-                placeholder="Describe your reel..." 
-                className="w-full p-3 bg-white/5 border border-white/10 rounded-lg h-28 resize-none focus:outline-none focus:border-blue-500 text-white" 
-            />
+            <div>
+                <label className="text-sm text-gray-400 mb-1 block">Caption</label>
+                <textarea 
+                    value={caption} 
+                    onChange={(e)=>setCaption(e.target.value)} 
+                    placeholder="Describe your reel..." 
+                    className="w-full p-3 bg-white/5 border border-white/10 rounded-lg h-24 resize-none focus:outline-none focus:border-blue-500 text-white transition" 
+                />
+            </div>
+
+            {/* Location Input */}
+            <div>
+                <label className="text-sm text-gray-400 mb-1 block">Add Location</label>
+                <div className="relative">
+                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+                    <Input 
+                        value={location} 
+                        onChange={(e)=>setLocation(e.target.value)} 
+                        placeholder="Nagpur, India" 
+                        className="pl-9 bg-white/5 border-white/10" 
+                    />
+                </div>
+            </div>
             
             <div>
                 <label className="text-sm text-gray-400 mb-2 block">Category</label>
@@ -144,14 +159,14 @@ export default function ReelUploadForm({ onClose }) {
                  <span>{progress}%</span>
               </div>
               <div className="w-full bg-gray-800 h-1.5 rounded-full overflow-hidden">
-                <div className="h-full bg-blue-500 transition-all duration-300" style={{width: `${Math.max(5, progress)}%`}} />
+                <div className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-300" style={{width: `${Math.max(5, progress)}%`}} />
               </div>
             </div>
           )}
 
           <div className="flex gap-3 justify-end">
             <Button variant="ghost" onClick={onClose} disabled={uploading}>Cancel</Button>
-            <Button onClick={startUpload} disabled={uploading || !file || !!videoError}>
+            <Button onClick={startUpload} disabled={uploading || !file || !!videoError} className="min-w-[100px]">
                 {uploading ? "Uploading..." : "Share Reel"}
             </Button>
           </div>
