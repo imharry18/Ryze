@@ -8,7 +8,7 @@ import {
   addDoc, 
   serverTimestamp, 
   setDoc,
-  increment, // <--- CRITICAL IMPORT FOR COUNTER
+  increment, 
   writeBatch,
   query,
   where,
@@ -72,7 +72,7 @@ export async function sendMessage(senderId, receiverId, text) {
   const messagesColRef = collection(db, "chats", chatId, "messages");
 
   try {
-    // 1. Add the actual message
+    // 1. Add the actual message to the subcollection
     await addDoc(messagesColRef, {
       senderId,
       text,
@@ -80,13 +80,15 @@ export async function sendMessage(senderId, receiverId, text) {
       read: false
     });
     
-    // 2. Update Chat Metadata & INCREMENT COUNTER [CRITICAL]
-    // This tells Firebase to add +1 to the receiver's unread count
+    // 2. Update Chat Metadata & INCREMENT COUNTER
+    // using setDoc with merge: true handles both creating new chats AND updating existing ones
     await setDoc(chatDocRef, {
       participants: [senderId, receiverId],
       lastMessage: text,
       lastMessageAt: serverTimestamp(),
-      [`unreadCount.${receiverId}`]: increment(1), // <--- THIS MAKES THE BADGE APPEAR
+      // This specific field update increments the counter for the RECEIVER
+      [`unreadCount.${receiverId}`]: increment(1), 
+      // Reset typing status for sender
       typing: { [senderId]: false }
     }, { merge: true });
 
@@ -103,12 +105,13 @@ export async function markChatAsRead(currentUserId, targetUserId) {
   const messagesColRef = collection(db, "chats", chatId, "messages");
 
   try {
-    // 1. Reset Badge to 0 when opened
-    await updateDoc(chatDocRef, {
+    // 1. Reset Badge to 0 for the current user
+    // We use setDoc with merge here too, just in case the doc is missing (rare but safe)
+    await setDoc(chatDocRef, {
       [`unreadCount.${currentUserId}`]: 0
-    });
+    }, { merge: true });
 
-    // 2. Mark messages as read (Blue Ticks)
+    // 2. Mark incoming messages as read (Blue Ticks logic)
     const q = query(
       messagesColRef, 
       where("senderId", "==", targetUserId),
@@ -124,6 +127,6 @@ export async function markChatAsRead(currentUserId, targetUserId) {
       await batch.commit();
     }
   } catch (error) {
-    // Ignore errors if chat doesn't exist yet
+    console.error("Error marking chat as read:", error);
   }
 }

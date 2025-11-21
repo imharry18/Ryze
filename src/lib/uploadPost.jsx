@@ -1,4 +1,3 @@
-// src/lib/uploadPost.jsx
 import {
   ref as storageRef,
   uploadBytesResumable,
@@ -20,8 +19,9 @@ export async function uploadPostAndMedia({
   file,
   mediaType,
   caption = "",
-  location = "", // New Parameter
+  location = "",
   postType = "post",
+  extraData = {}, // New Parameter
   onProgress = () => {},
 }) {
   console.log("Step 1: Starting Post Creation...");
@@ -30,31 +30,40 @@ export async function uploadPostAndMedia({
   
   let newPostRef;
   try {
-    newPostRef = await addDoc(postsCol, {
+    // Base post object
+    const postPayload = {
       userId: uid,
       caption,
-      location, // Save Location
+      location,
       postType,
       mediaType,
       createdAt: serverTimestamp(),
       likesCount: 0,
       commentsCount: 0,
-      mediaURL: null, 
-      processing: true 
-    });
+      mediaURL: null,
+      processing: true,
+      ...extraData // Spread extra fields (category, isAnonymous, etc.)
+    };
+
+    newPostRef = await addDoc(postsCol, postPayload);
   } catch (dbError) {
     console.error("Firestore Create Error:", dbError);
-    throw new Error("Failed to create post record. Check internet or permissions.");
+    throw new Error("Failed to create post record.");
   }
 
   const postId = newPostRef.id;
-  console.log("Step 2: Post Record Created with ID:", postId);
+  
+  // If there is NO file (like for text-only confessions), we just finish here
+  if (!file) {
+     await updateDoc(doc(db, "posts", postId), { processing: false });
+     return { postId, downloadURL: null };
+  }
 
+  // If there IS a file, proceed with upload
   const ext = file.name.split(".").pop();
   const filename = `${Date.now()}.${ext}`;
   const stPath = `posts/${uid}/${postId}/${filename}`;
   
-  console.log("Step 3: Starting File Upload to:", stPath);
   const sRef = storageRef(storage, stPath);
   const uploadTask = uploadBytesResumable(sRef, file);
 
@@ -71,10 +80,8 @@ export async function uploadPostAndMedia({
       },
       async () => {
         try {
-          console.log("Step 4: File Upload Complete. Getting URL...");
           const url = await getDownloadURL(uploadTask.snapshot.ref);
           
-          console.log("Step 5: Updating Post with URL...");
           await updateDoc(
             doc(db, "posts", postId),
             {
@@ -84,14 +91,6 @@ export async function uploadPostAndMedia({
               processing: false 
             }
           );
-
-          try {
-              await setDoc(doc(db, "userPosts", uid, "posts", postId), {
-                createdAt: serverTimestamp(),
-              });
-          } catch (linkError) {
-              console.warn("Failed to link post to user profile (non-fatal):", linkError);
-          }
 
           resolve({ postId, downloadURL: url });
         } catch (e) {

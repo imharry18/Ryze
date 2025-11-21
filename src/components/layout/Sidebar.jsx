@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
@@ -19,11 +19,26 @@ export default function Sidebar() {
   const [uploadType, setUploadType] = useState(null);
   const [totalUnread, setTotalUnread] = useState(0);
   const [user, setUser] = useState(null);
+  
+  // Timer ref for the delay
+  const closeMenuTimer = useRef(null);
 
   const openModal = (type) => {
     setUploadType(type);
     setIsUploadMenuOpen(false);
     setIsUploadModalOpen(true);
+  };
+
+  // Hover Handlers with Delay
+  const handleMouseEnter = () => {
+    if (closeMenuTimer.current) clearTimeout(closeMenuTimer.current);
+    setIsUploadMenuOpen(true);
+  };
+
+  const handleMouseLeave = () => {
+    closeMenuTimer.current = setTimeout(() => {
+      setIsUploadMenuOpen(false);
+    }, 1000); // 1 second delay (as requested)
   };
 
   // Global Unread Listener
@@ -79,22 +94,33 @@ export default function Sidebar() {
               )}
             </Link>
 
-            {/* Upload Button */}
+            {/* ADD Button (Wrapper) */}
             <div 
-              className="relative"
-              onMouseEnter={() => setIsUploadMenuOpen(true)}
-              onMouseLeave={() => setIsUploadMenuOpen(false)}
+              className="relative group"
+              onMouseEnter={handleMouseEnter}
+              onMouseLeave={handleMouseLeave}
             >
+                {/* Main Trigger Button */}
                 <button className="w-full flex items-center gap-4 p-3 rounded-xl transition-all duration-200 group text-gray-400 hover:bg-white/5 hover:text-gray-200 border border-transparent">
                   <div className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 group-hover:scale-110 transition-transform text-cyan-500">
                     <PlusCircle size={24} />
                   </div>
-                  <span className="text-base font-medium tracking-wide">Upload</span>
+                  <span className="text-base font-medium tracking-wide">Add</span>
                 </button>
+                
+                {/* Dropdown Menu Container */}
+                {/* Placed absolute relative to the button wrapper */}
                 {isUploadMenuOpen && (
-                    <div className="absolute left-full top-0 ml-4 z-50">
+                    <div 
+                      className="absolute left-full bottom-0 pl-6 z-50" // bottom-0 aligns bottoms, pl-6 is the safe bridge
+                      onMouseEnter={handleMouseEnter}
+                      onMouseLeave={handleMouseLeave}
+                    >
+                        {/* The Menu Itself */}
                         <UploadMenu close={() => setIsUploadMenuOpen(false)} openModal={openModal} />
-                        <div className="absolute top-4 -left-1.5 w-3 h-3 bg-[#18181b] border-l border-b border-white/10 transform rotate-45" />
+                        
+                        {/* Little Triangle Pointer (Optional, purely visual) */}
+                        {/* <div className="absolute bottom-6 left-4 w-3 h-3 bg-[#18181b] border-l border-b border-white/10 transform rotate-45" /> */}
                     </div>
                 )}
             </div>

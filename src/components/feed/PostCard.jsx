@@ -1,8 +1,8 @@
-// src/components/feed/PostCard.jsx
 "use client";
 
 import React, { useState, useEffect } from "react";
 import Image from "next/image";
+import Link from "next/link"; // Import Link
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Heart, MessageCircle, Share2, MoreHorizontal } from "lucide-react";
@@ -64,19 +64,28 @@ export default function PostCard({ post }) {
       {/* --- Header --- */}
       <div className="flex items-center justify-between p-4">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 relative rounded-full overflow-hidden bg-gray-800 border border-white/10">
-            <Image
-              src={author?.dp || "/default-dp.png"}
-              alt="Author"
-              fill
-              className="object-cover"
-            />
-          </div>
+          
+          {/* Redirect to Profile on Image Click */}
+          <Link href={`/profile/${post.userId}`}>
+            <div className="h-10 w-10 relative rounded-full overflow-hidden bg-gray-800 border border-white/10 cursor-pointer hover:opacity-80 transition">
+                <Image
+                src={author?.dp || "/default-dp.png"}
+                alt="Author"
+                fill
+                className="object-cover"
+                />
+            </div>
+          </Link>
+
           <div>
             <div className="flex items-center gap-2">
-                <p className="text-white font-semibold text-sm hover:underline cursor-pointer">
-                    {author?.username || "Unknown"}
-                </p>
+                {/* Redirect to Profile on Name Click */}
+                <Link href={`/profile/${post.userId}`}>
+                    <p className="text-white font-semibold text-sm hover:underline cursor-pointer">
+                        {author?.username || "Unknown"}
+                    </p>
+                </Link>
+
                 {/* Follow Button Logic */}
                 {user && user.uid !== post.userId && (
                     <button 
@@ -88,7 +97,7 @@ export default function PostCard({ post }) {
                     </button>
                 )}
             </div>
-            {/* Updated Subtext: Location | Date | Time */}
+            {/* Subtext: Location | Date | Time */}
             <p className="text-gray-500 text-[11px] mt-0.5">{headerMeta}</p>
           </div>
         </div>
@@ -114,7 +123,9 @@ export default function PostCard({ post }) {
         {/* 1. Caption Row */}
         <div className="mb-4">
           <p className="text-sm text-white leading-relaxed">
-            <span className="font-bold mr-2 cursor-pointer hover:underline">{author?.username}</span>
+            <Link href={`/profile/${post.userId}`}>
+                <span className="font-bold mr-2 cursor-pointer hover:underline">{author?.username}</span>
+            </Link>
             {post.caption}
           </p>
         </div>

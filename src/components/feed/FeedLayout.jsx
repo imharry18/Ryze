@@ -29,18 +29,8 @@ export default function FeedLayout() {
       {/* --- CENTER FEED --- */}
       <main className="w-full max-w-[600px] mx-auto xl:mx-0">
         
-        {/* Stories / Status Bar (Placeholder) */}
-        <div className="flex gap-4 overflow-x-auto pb-6 mb-2 scrollbar-hide">
-             <div className="flex-shrink-0 w-16 h-16 rounded-full bg-gradient-to-tr from-yellow-400 to-purple-600 p-[2px]">
-                <div className="w-full h-full rounded-full bg-black flex items-center justify-center border-2 border-black">
-                    <span className="text-xs font-bold text-white">+</span>
-                </div>
-             </div>
-             {[1,2,3,4].map(i => (
-                 <div key={i} className="flex-shrink-0 w-16 h-16 rounded-full bg-gray-800 border border-white/10 animate-pulse" />
-             ))}
-        </div>
-
+        {/* Stories Section has been removed for Ryze */}
+        
         {/* Posts Stream */}
         {loading ? (
           <div className="flex justify-center py-20">
@@ -60,7 +50,6 @@ export default function FeedLayout() {
       </main>
 
       {/* --- RIGHT SIDEBAR (Suggested People) --- */}
-      {/* This is the RIGHT sidebar (Suggestions), NOT the navigation sidebar. */}
       <aside className="hidden xl:block w-[350px] shrink-0 sticky top-24 h-fit">
         <div className="bg-[#121212] border border-white/10 rounded-xl p-6">
             <h3 className="text-gray-400 font-semibold mb-4 text-sm uppercase tracking-wider">Suggested for you</h3>

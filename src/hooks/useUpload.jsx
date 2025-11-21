@@ -1,4 +1,3 @@
-// src/hooks/useUpload.jsx
 import { useState, useCallback } from "react";
 import { uploadPostAndMedia } from "@/lib/uploadPost";
 import { storage, db } from "@/lib/firebase";
@@ -9,8 +8,8 @@ export default function useUpload() {
   const [error, setError] = useState("");
   const [successId, setSuccessId] = useState(null);
 
-  // Added 'location' to destructuring
-  const upload = useCallback(async ({ uid, file, mediaType, caption, location, postType }) => {
+  // Updated signature to accept extraData
+  const upload = useCallback(async ({ uid, file, mediaType, caption, location, postType, extraData = {} }) => {
     setError("");
     setSuccessId(null);
     setUploading(true);
@@ -24,8 +23,9 @@ export default function useUpload() {
         file,
         mediaType,
         caption,
-        location, // Pass it down
+        location, 
         postType,
+        extraData, // Pass it down
         onProgress: (p) => setProgress(p),
       });
       setSuccessId(r.postId);
