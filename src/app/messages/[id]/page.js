@@ -1,3 +1,4 @@
+// src/app/messages/[id]/page.js
 "use client";
 
 import { useEffect, useState, useRef } from "react";
@@ -87,11 +88,11 @@ export default function ChatRoom() {
   if (!targetUser) return <div className="h-full flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
 
   return (
-    <div className="flex flex-col h-full bg-[#0a0a0a]">
+    <div className="flex flex-col h-full bg-[#050505]">
       
       {/* Header */}
-      <div className="p-4 border-b border-white/5 flex items-center justify-between bg-[#0c0c0f] shadow-sm z-10">
-        <div className="flex items-center gap-4">
+      <div className="p-3 px-4 border-b border-white/5 flex items-center justify-between bg-[#0c0c0f] shadow-sm z-10">
+        <div className="flex items-center gap-3">
             <Link href="/messages" className="md:hidden p-2 -ml-2 hover:bg-white/10 rounded-full transition">
                 <ArrowLeft size={20} />
             </Link>
@@ -99,43 +100,48 @@ export default function ChatRoom() {
                 <img src={targetUser.dp || "/default-dp.png"} className="w-10 h-10 rounded-full object-cover bg-gray-800" />
             </div>
             <div>
-                <h2 className="font-bold text-white text-base leading-tight">{targetUser.name}</h2>
+                <h2 className="font-bold text-white text-sm leading-tight">{targetUser.name}</h2>
                 <p className="text-xs text-gray-500">@{targetUser.username}</p>
             </div>
         </div>
         <button className="p-2 rounded-full hover:bg-white/5 text-gray-400 transition"><MoreVertical size={20} /></button>
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-1 bg-black/50 min-h-0 scroll-smooth">
+      {/* Messages Area */}
+      {/* Added a subtle background pattern effect here implicitly via bg-black/50 but ideally you'd use a pattern image */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0 scroll-smooth custom-scrollbar">
         {messages.map((msg) => {
             const isMe = msg.senderId === user.uid;
             return (
-                <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"} animate-fadeIn mb-1`}>
+                <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"} animate-fadeIn`}>
                     <div 
-                        className={`relative max-w-[75%] px-3 py-1.5 text-sm shadow-sm break-words
-                        ${isMe ? "bg-blue-600 text-white rounded-lg rounded-tr-none" : "bg-[#1e1e1e] text-gray-200 rounded-lg rounded-tl-none"}`}
+                        className={`relative min-w-[80px] max-w-[75%] px-3 pt-2 pb-5 text-sm shadow-md break-words rounded-xl
+                        ${isMe 
+                            ? "bg-[#005c4b] text-white rounded-tr-none" // WhatsApp Green
+                            : "bg-[#202c33] text-gray-100 rounded-tl-none" // Dark Gray
+                        }`}
                     >
-                        <div className="flex flex-col gap-0.5">
-                            <span className="pr-14 pb-1">{msg.text}</span>
-                            <div className="flex items-center gap-1 self-end absolute bottom-1 right-2">
-                                <span className={`text-[10px] ${isMe ? "text-blue-100" : "text-gray-500"}`}>
-                                    {msg.createdAt ? new Date(msg.createdAt.seconds * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ""}
-                                </span>
-                                {isMe && (
-                                    msg.read 
-                                    ? <CheckCheck size={14} className="text-blue-200" strokeWidth={2.5} /> 
-                                    : <CheckCheck size={14} className="text-blue-300/70" />
-                                )}
-                            </div>
+                        <span className="block leading-relaxed">{msg.text}</span>
+                        
+                        {/* Timestamp & Tick Gap Fix */}
+                        <div className="absolute bottom-1 right-2 flex items-center gap-1">
+                            <span className={`text-[9px] font-medium ${isMe ? "text-green-100/70" : "text-gray-400"}`}>
+                                {msg.createdAt ? new Date(msg.createdAt.seconds * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ""}
+                            </span>
+                            {isMe && (
+                                msg.read 
+                                ? <CheckCheck size={14} className="text-cyan-400" /> // Blue Tick
+                                : <CheckCheck size={14} className="text-gray-400" /> // Gray Tick
+                            )}
                         </div>
                     </div>
                 </div>
             );
         })}
+        
         {partnerTyping && (
            <div className="flex justify-start animate-fadeIn">
-              <div className="bg-[#1e1e1e] px-4 py-3 rounded-xl rounded-tl-none flex items-center gap-1 shadow-sm">
+              <div className="bg-[#202c33] px-4 py-3 rounded-xl rounded-tl-none flex items-center gap-1 shadow-sm">
                  <div className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
                  <div className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
                  <div className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce"></div>
@@ -145,23 +151,23 @@ export default function ChatRoom() {
         <div ref={scrollRef} className="h-1" />
       </div>
 
-      {/* Input */}
-      <div className="p-4 bg-[#0c0c0f] border-t border-white/5 flex items-center gap-3">
-        <div className="flex-1 bg-[#1a1a1a] rounded-full flex items-center px-2 border border-transparent focus-within:border-blue-500/30 transition-colors">
+      {/* Input Area */}
+      <div className="p-3 bg-[#0c0c0f] border-t border-white/5 flex items-center gap-3">
+        <div className="flex-1 bg-[#1a1a1a] rounded-2xl flex items-center px-2 border border-transparent focus-within:border-white/10 transition-colors">
             <input 
                 value={input}
                 onChange={handleInputChange}
                 onKeyDown={(e) => e.key === "Enter" && handleSend()}
                 placeholder="Type a message..."
-                className="flex-1 bg-transparent border-none px-4 py-3.5 text-white text-sm focus:outline-none placeholder:text-gray-500"
+                className="flex-1 bg-transparent border-none px-4 py-3 text-white text-sm focus:outline-none placeholder:text-gray-500"
             />
         </div>
         <button 
             onClick={handleSend}
             disabled={!input.trim()}
-            className={`p-3.5 rounded-full transition shadow-lg ${input.trim() ? "bg-blue-600 text-white hover:bg-blue-500 hover:scale-105" : "bg-[#1a1a1a] text-gray-600"}`}
+            className={`p-3 rounded-full transition shadow-lg flex items-center justify-center ${input.trim() ? "bg-[#005c4b] text-white hover:bg-[#008f72] hover:scale-105" : "bg-[#1a1a1a] text-gray-600"}`}
         >
-            <Send size={20} fill={input.trim() ? "currentColor" : "none"} />
+            <Send size={20} fill={input.trim() ? "currentColor" : "none"} className={input.trim() ? "ml-0.5" : ""} />
         </button>
       </div>
 
