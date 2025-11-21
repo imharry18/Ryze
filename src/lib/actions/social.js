@@ -8,7 +8,7 @@ import {
   addDoc, 
   serverTimestamp, 
   setDoc,
-  increment,
+  increment, // <--- CRITICAL IMPORT FOR COUNTER
   writeBatch,
   query,
   where,
@@ -80,12 +80,13 @@ export async function sendMessage(senderId, receiverId, text) {
       read: false
     });
     
-    // 2. Update Chat Metadata (For Sorting & Badges)
+    // 2. Update Chat Metadata & INCREMENT COUNTER [CRITICAL]
+    // This tells Firebase to add +1 to the receiver's unread count
     await setDoc(chatDocRef, {
       participants: [senderId, receiverId],
       lastMessage: text,
       lastMessageAt: serverTimestamp(),
-      [`unreadCount.${receiverId}`]: increment(1), // Add badge for receiver
+      [`unreadCount.${receiverId}`]: increment(1), // <--- THIS MAKES THE BADGE APPEAR
       typing: { [senderId]: false }
     }, { merge: true });
 
@@ -102,12 +103,12 @@ export async function markChatAsRead(currentUserId, targetUserId) {
   const messagesColRef = collection(db, "chats", chatId, "messages");
 
   try {
-    // 1. Reset Badge Counter for Me
+    // 1. Reset Badge to 0 when opened
     await updateDoc(chatDocRef, {
       [`unreadCount.${currentUserId}`]: 0
     });
 
-    // 2. Mark all unread messages from THEM as 'read: true' (Triggers Blue Tick)
+    // 2. Mark messages as read (Blue Ticks)
     const q = query(
       messagesColRef, 
       where("senderId", "==", targetUserId),
@@ -123,6 +124,6 @@ export async function markChatAsRead(currentUserId, targetUserId) {
       await batch.commit();
     }
   } catch (error) {
-    // Ignore errors if doc doesn't exist yet
+    // Ignore errors if chat doesn't exist yet
   }
 }

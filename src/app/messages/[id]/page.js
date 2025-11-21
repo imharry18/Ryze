@@ -7,7 +7,7 @@ import { collection, query, orderBy, onSnapshot, doc, getDoc, setDoc } from "fir
 import { onAuthStateChanged } from "firebase/auth";
 import { useParams, useRouter } from "next/navigation";
 import { getChatId, markChatAsRead, sendMessage } from "@/lib/actions/social"; 
-import { Loader2, Send, ArrowLeft, MoreVertical, Check, CheckCheck } from "lucide-react";
+import { Loader2, Send, ArrowLeft, MoreVertical, CheckCheck } from "lucide-react";
 import Link from "next/link";
 
 export default function ChatRoom() {
@@ -34,7 +34,7 @@ export default function ChatRoom() {
 
       const chatId = getChatId(currentUser.uid, targetUserId);
 
-      // 1. Mark as Read
+      // 1. Mark as Read immediately
       await markChatAsRead(currentUser.uid, targetUserId);
 
       // 2. Messages Listener
@@ -88,50 +88,51 @@ export default function ChatRoom() {
   if (!targetUser) return <div className="h-full flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
 
   return (
-    <div className="flex flex-col h-full bg-[#050505]">
+    <div className="flex flex-col h-full bg-[#0b141a]"> 
+      {/* Dark background like WhatsApp Web Dark */}
       
       {/* Header */}
-      <div className="p-3 px-4 border-b border-white/5 flex items-center justify-between bg-[#0c0c0f] shadow-sm z-10">
+      <div className="p-3 px-4 border-b border-white/5 flex items-center justify-between bg-[#202c33] shadow-sm z-10">
         <div className="flex items-center gap-3">
             <Link href="/messages" className="md:hidden p-2 -ml-2 hover:bg-white/10 rounded-full transition">
-                <ArrowLeft size={20} />
+                <ArrowLeft size={20} className="text-gray-300" />
             </Link>
             <div className="relative">
                 <img src={targetUser.dp || "/default-dp.png"} className="w-10 h-10 rounded-full object-cover bg-gray-800" />
             </div>
             <div>
                 <h2 className="font-bold text-white text-sm leading-tight">{targetUser.name}</h2>
-                <p className="text-xs text-gray-500">@{targetUser.username}</p>
+                <p className="text-xs text-gray-400">@{targetUser.username}</p>
             </div>
         </div>
         <button className="p-2 rounded-full hover:bg-white/5 text-gray-400 transition"><MoreVertical size={20} /></button>
       </div>
 
       {/* Messages Area */}
-      {/* Added a subtle background pattern effect here implicitly via bg-black/50 but ideally you'd use a pattern image */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0 scroll-smooth custom-scrollbar">
+      {/* Added implicit pattern background effect via color */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-1.5 min-h-0 scroll-smooth custom-scrollbar">
         {messages.map((msg) => {
             const isMe = msg.senderId === user.uid;
             return (
                 <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"} animate-fadeIn`}>
                     <div 
-                        className={`relative min-w-[80px] max-w-[75%] px-3 pt-2 pb-5 text-sm shadow-md break-words rounded-xl
+                        className={`relative min-w-[100px] max-w-[75%] px-3 pt-2 pb-5 text-sm shadow-md break-words rounded-lg
                         ${isMe 
-                            ? "bg-[#005c4b] text-white rounded-tr-none" // WhatsApp Green
-                            : "bg-[#202c33] text-gray-100 rounded-tl-none" // Dark Gray
+                            ? "bg-[#005c4b] text-white rounded-tr-none" // Sent: Green
+                            : "bg-[#202c33] text-white rounded-tl-none" // Received: Dark Gray
                         }`}
                     >
-                        <span className="block leading-relaxed">{msg.text}</span>
+                        <span className="block leading-snug text-[14.2px]">{msg.text}</span>
                         
-                        {/* Timestamp & Tick Gap Fix */}
+                        {/* Timestamp & Tick - Positioned Absolute Bottom Right */}
                         <div className="absolute bottom-1 right-2 flex items-center gap-1">
-                            <span className={`text-[9px] font-medium ${isMe ? "text-green-100/70" : "text-gray-400"}`}>
+                            <span className="text-[10px] text-white/60 font-medium">
                                 {msg.createdAt ? new Date(msg.createdAt.seconds * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ""}
                             </span>
                             {isMe && (
                                 msg.read 
-                                ? <CheckCheck size={14} className="text-cyan-400" /> // Blue Tick
-                                : <CheckCheck size={14} className="text-gray-400" /> // Gray Tick
+                                ? <CheckCheck size={15} className="text-cyan-400" /> // Blue Tick
+                                : <CheckCheck size={15} className="text-gray-400" /> // Gray Tick
                             )}
                         </div>
                     </div>
@@ -152,20 +153,20 @@ export default function ChatRoom() {
       </div>
 
       {/* Input Area */}
-      <div className="p-3 bg-[#0c0c0f] border-t border-white/5 flex items-center gap-3">
-        <div className="flex-1 bg-[#1a1a1a] rounded-2xl flex items-center px-2 border border-transparent focus-within:border-white/10 transition-colors">
+      <div className="p-3 bg-[#202c33] flex items-center gap-3">
+        <div className="flex-1 bg-[#2a3942] rounded-lg flex items-center px-4 py-1 border border-transparent focus-within:border-white/10 transition-colors">
             <input 
                 value={input}
                 onChange={handleInputChange}
                 onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                placeholder="Type a message..."
-                className="flex-1 bg-transparent border-none px-4 py-3 text-white text-sm focus:outline-none placeholder:text-gray-500"
+                placeholder="Type a message"
+                className="flex-1 bg-transparent border-none py-2.5 text-white text-sm focus:outline-none placeholder:text-gray-400"
             />
         </div>
         <button 
             onClick={handleSend}
             disabled={!input.trim()}
-            className={`p-3 rounded-full transition shadow-lg flex items-center justify-center ${input.trim() ? "bg-[#005c4b] text-white hover:bg-[#008f72] hover:scale-105" : "bg-[#1a1a1a] text-gray-600"}`}
+            className={`p-3 rounded-full transition shadow-lg flex items-center justify-center ${input.trim() ? "bg-[#00a884] text-white hover:bg-[#008f72]" : "bg-[#2a3942] text-gray-500"}`}
         >
             <Send size={20} fill={input.trim() ? "currentColor" : "none"} className={input.trim() ? "ml-0.5" : ""} />
         </button>
