@@ -1,36 +1,25 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
-import { Check, CheckCheck, Trash2, Reply, Copy } from "lucide-react";
+import React from "react";
+import { Check, CheckCheck } from "lucide-react";
 
 export default function MessageBubble({ 
   msg, 
   isMe, 
-  onReply, 
-  onDelete, 
+  onContextMenu, 
   onJumpTo 
 }) {
-  const [showMenu, setShowMenu] = useState(false);
-  const [menuPos, setMenuPos] = useState({ x: 0, y: 0 });
-  const menuRef = useRef(null);
-
+  
   const time = msg.createdAt 
     ? new Date(msg.createdAt.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
     : "...";
 
-  const handleContextMenu = (e) => {
+  // Trigger Parent's Menu
+  const handleRightClick = (e) => {
     e.preventDefault();
-    const x = Math.min(e.clientX, window.innerWidth - 160); 
-    const y = Math.min(e.clientY, window.innerHeight - 150);
-    setMenuPos({ x, y });
-    setShowMenu(true);
+    e.stopPropagation();
+    onContextMenu(e, msg);
   };
-
-  useEffect(() => {
-    const handleClick = () => setShowMenu(false);
-    if (showMenu) window.addEventListener("click", handleClick);
-    return () => window.removeEventListener("click", handleClick);
-  }, [showMenu]);
 
   if (msg.deletedFor?.includes(isMe ? "me" : "other")) return null;
 
@@ -41,7 +30,7 @@ export default function MessageBubble({
       id={msg.id} 
       className={`flex flex-col ${isMe ? "items-end" : "items-start"} group relative mb-1`}
     >
-      
+      {/* Reply Preview */}
       {msg.replyTo && !isDeletedMessage && (
         <div 
           onClick={() => onJumpTo(msg.replyTo.id)}
@@ -55,10 +44,11 @@ export default function MessageBubble({
         </div>
       )}
 
+      {/* Bubble Body */}
       <div 
-        onContextMenu={handleContextMenu}
+        onContextMenu={handleRightClick}
         className={`
-          relative max-w-[85%] sm:max-w-[70%] px-4 py-2 text-[15px] shadow-sm break-words rounded-2xl
+          relative max-w-[85%] sm:max-w-[70%] px-4 py-2 text-[15px] shadow-sm break-words rounded-2xl cursor-default select-text
           ${isDeletedMessage ? "italic text-sm border border-white/10 bg-white/5 text-gray-500" : ""}
           ${!isDeletedMessage && isMe 
             ? "bg-gradient-to-br from-indigo-600 to-blue-600 text-white rounded-br-sm" 
@@ -67,6 +57,7 @@ export default function MessageBubble({
       >
         {msg.text}
 
+        {/* Time & Read Status */}
         <div className={`flex items-center justify-end gap-1 mt-1 select-none ${isDeletedMessage ? "hidden" : ""}`}>
           <span className={`text-[10px] ${isMe ? "text-indigo-200/70" : "text-gray-500"}`}>
             {time}
@@ -83,47 +74,6 @@ export default function MessageBubble({
           )}
         </div>
       </div>
-
-      {showMenu && (
-        <div 
-          ref={menuRef}
-          style={{ top: menuPos.y, left: menuPos.x }}
-          className="fixed z-50 w-40 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl overflow-hidden animate-scale-in"
-        >
-          <button 
-            onClick={() => onReply(msg)}
-            className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 flex items-center gap-2"
-          >
-            <Reply size={14} /> Reply
-          </button>
-          
-          <button 
-            onClick={() => navigator.clipboard.writeText(msg.text)}
-            className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 flex items-center gap-2"
-          >
-            <Copy size={14} /> Copy
-          </button>
-
-          {isMe && !isDeletedMessage && (
-            <>
-              <div className="h-px bg-white/10 my-1" />
-              <button 
-                onClick={() => onDelete(msg.id, true)}
-                className="w-full text-left px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 flex items-center gap-2"
-              >
-                <Trash2 size={14} /> Unsend
-              </button>
-            </>
-          )}
-          
-          <button 
-            onClick={() => onDelete(msg.id, false)}
-            className="w-full text-left px-4 py-2.5 text-sm text-gray-400 hover:bg-white/5 flex items-center gap-2"
-          >
-            <Trash2 size={14} /> Delete for me
-          </button>
-        </div>
-      )}
 
     </div>
   );
