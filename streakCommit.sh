@@ -25,13 +25,15 @@ echo "🔍 Checking today's commits..."
 today_commits=$(get_commits_today)
 target=$((RANDOM % 3 + 1))
 
-echo "📅 Today: $today_commits commits / Required: $target"
+echo "📅 Today: $today_commits commits / Target Needed: $target"
 
+# ------- Handle Today -------
 while [ "$today_commits" -lt "$target" ]; do
-    read -p "✍ Commit message for TODAY: " msg
+    read -p "✍ Enter commit message for TODAY: " msg
 
     time=$(random_time)
     git add .
+    git reset *.sh *.bat >/dev/null 2>&1    # ⛔ Skip script & .bat
     git commit --date="$(date +%Y-%m-%d) $time" -m "$msg"
 
     today_commits=$((today_commits+1))
@@ -39,25 +41,27 @@ while [ "$today_commits" -lt "$target" ]; do
 
     echo "✔ Commit added → Today @ $time"
 done
-echo "🎉 Today's goal completed!"
+echo "🎉 Today's target completed!"
 
-# Backfill past days
+
+# ------- Backfill Older Days -------
 for ((i=1; i<=MAX_DAYS; i++)); do
     date=$(date -d "$i days ago" +%Y-%m-%d)
     count=$(get_commits_on_date "$date")
 
     if [ "$count" -eq "0" ]; then
         numCommits=$((RANDOM % 3 + 1))
-        echo "📅 $date → No commits, creating $numCommits commits"
+        echo "📅 $date → No commits found, creating $numCommits commits"
 
         for ((c=1; c<=numCommits; c++)); do
             read -p "✍ Commit message for $date (commit $c/$numCommits): " msg
             time=$(random_time)
 
             git add .
+            git reset *.sh *.bat >/dev/null 2>&1    # ⛔ Avoid committing script & .bat
             git commit --date="$date $time" -m "$msg"
-            summary["$date"]=$((summary["$date"]+1))
 
+            summary["$date"]=$((summary["$date"]+1))
             echo "✔ Commit added → $date @ $time"
         done
     else
@@ -65,15 +69,19 @@ for ((i=1; i<=MAX_DAYS; i++)); do
     fi
 done
 
-echo "🚀 Pushing commits to GitHub..."
+
+# ------- Pushing -------
+echo "🚀 First push to GitHub..."
 git push origin main --force
 
 echo -e "\n━━━━━━━━━━━━━━━━━━━━━━"
 echo "📜 COMMIT SUMMARY"
 echo "━━━━━━━━━━━━━━━━━━━━━━"
-
 for day in "${!summary[@]}"; do
     echo "📅 $day → ${summary[$day]} commits"
 done
 
-echo "✨ Completed Successfully!"
+echo "🚀 Final double-push to ensure everything uploaded..."
+git push origin main --force
+
+echo "✨ All done successfully!"
