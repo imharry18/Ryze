@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { MessageCircle } from "lucide-react";
+import { MessageSquare } from "lucide-react";
 
 export default function UserRow({ person, isInteracted, isActive }) {
   const unreadCount = Number(person.unread || 0);
@@ -15,66 +15,78 @@ export default function UserRow({ person, isInteracted, isActive }) {
       })
     : "";
 
-  // Dynamic Styles
-  let containerStyle = "flex items-center gap-3 p-3 rounded-2xl transition-all cursor-pointer relative group mb-1 ";
+  // --- STYLING ---
+  // Active: Subtle Glass Background (No Border)
+  // Inactive: Hover effect
+  let containerClass = "relative flex items-center gap-3.5 p-3 rounded-lg transition-all duration-200 group cursor-pointer ";
+  
   if (isActive) {
-    containerStyle += "bg-white/10 border border-white/10";
+    containerClass += "bg-white/[0.08]"; // Just background, no border
   } else {
-    containerStyle += "hover:bg-white/5 border border-transparent";
+    containerClass += "hover:bg-white/[0.03]";
   }
 
   return (
-    <Link href={`/messages/${person.uid}`} className="block">
-      <div className={containerStyle}>
+    <Link href={`/messages/${person.uid}`} className="block outline-none">
+      <div className={containerClass}>
         
         {/* Avatar */}
-        <div className="relative h-12 w-12 shrink-0 rounded-full overflow-hidden border border-white/10 bg-gray-800">
-          <img
-            src={person.dp || "/default-dp.png"}
-            className="w-full h-full object-cover"
-            alt={person.name}
-          />
+        <div className="relative shrink-0">
+          <div className="relative h-11 w-11 rounded-full overflow-hidden bg-gray-800 border border-white/10 shadow-sm">
+            <img
+              src={person.dp || "/default-dp.png"}
+              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+              alt={person.name}
+            />
+          </div>
         </div>
 
         {/* Info Column */}
-        <div className="flex-1 min-w-0 flex flex-col justify-center">
+        <div className="flex-1 min-w-0 flex flex-col justify-center gap-[2px]">
           
-          {/* Top Row: Name & Time */}
-          <div className="flex justify-between items-center mb-0.5">
-            <h3 className={`font-bold truncate text-sm ${hasUnread ? "text-white" : "text-gray-300 group-hover:text-white"}`}>
+          {/* Name & Time Row */}
+          <div className="flex justify-between items-center">
+            <h3 className={`text-[14px] font-semibold truncate transition-colors ${
+                hasUnread ? "text-white" : "text-gray-300 group-hover:text-white"
+            }`}>
               {person.name}
             </h3>
             
             {isInteracted && (
-              <span className={`text-[10px] whitespace-nowrap ml-2 ${hasUnread ? "text-green-400 font-bold" : "text-gray-600"}`}>
+              <span className={`text-[10px] whitespace-nowrap font-medium ${
+                  hasUnread ? "text-cyan-400" : "text-gray-600 group-hover:text-gray-500"
+              }`}>
                 {timeDisplay}
               </span>
             )}
           </div>
 
-          {/* Bottom Row: Message Preview OR "New Chat" Indicator */}
-          <div className="flex justify-between items-center h-5">
+          {/* Message / Status Row */}
+          <div className="flex justify-between items-center h-4">
             
             {hasUnread ? (
-              // --- UNREAD STATE: Icon + "New Chat" ---
+              // --- UNREAD: Blue/Cyan Techy Style ---
               <div className="flex items-center gap-1.5">
-                 <MessageCircle size={13} className="text-blue-400 fill-blue-400/20" />
-                 <span className="text-xs font-bold text-blue-400 tracking-wide">New Chat</span>
+                 <span className="text-[11px] font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 tracking-wide animate-pulse">
+                    New Chat
+                 </span>
               </div>
             ) : (
-              // --- READ STATE: Actual Message Content ---
-              <p className="text-xs truncate text-gray-500 pr-2 flex-1">
+              // --- READ: Standard Gray ---
+              <p className={`text-[11px] truncate pr-2 flex-1 ${isActive ? "text-gray-400" : "text-gray-500 group-hover:text-gray-400"}`}>
                 {isInteracted ? (
-                  person.lastMessage || "Attachment"
+                  person.lastMessage || <span className="italic opacity-50">Attachment</span>
                 ) : (
-                  <span className="text-blue-400">Start conversation</span>
+                  <span className="flex items-center gap-1 text-cyan-500/60 group-hover:text-cyan-400 transition-colors">
+                    <MessageSquare size={10} /> Say Hi
+                  </span>
                 )}
               </p>
             )}
 
-            {/* --- UNREAD BADGE: Green Dot --- */}
+            {/* --- TECHY DOT --- */}
             {hasUnread && (
-              <div className="shrink-0 w-2.5 h-2.5 bg-green-500 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.6)] animate-pulse ml-2"></div>
+              <div className="shrink-0 w-2 h-2 rounded-full bg-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.9)] animate-pulse"></div>
             )}
           </div>
         </div>

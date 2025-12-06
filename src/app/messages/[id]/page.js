@@ -30,7 +30,7 @@ export default function ChatRoom() {
   const [isMenuOpen, setIsMenuOpen] = useState(false); // Top header menu
   const [replyMessage, setReplyMessage] = useState(null);
   
-  // --- CONTEXT MENU STATE (Moved to Parent) ---
+  // --- CONTEXT MENU STATE ---
   const [contextMenu, setContextMenu] = useState({ 
     visible: false, 
     x: 0, 
@@ -47,7 +47,6 @@ export default function ChatRoom() {
   // --- HANDLERS: Context Menu ---
   const handleContextMenu = (e, msg) => {
     e.preventDefault();
-    // Calculate position safely
     const x = Math.min(e.clientX, window.innerWidth - 170); 
     const y = Math.min(e.clientY, window.innerHeight - 200);
     
@@ -100,7 +99,6 @@ export default function ChatRoom() {
   }, [messages, isInitialLoad]);
 
   // --- FIREBASE LOGIC ---
-  // Mark Read
   const markRead = async (currentUserId, targetId, chatId) => {
     if (!currentUserId || !targetId) return;
     await updateDoc(doc(db, "chats", chatId), { [`unreadCount.${currentUserId}`]: 0 }).catch(() => {});
@@ -113,7 +111,6 @@ export default function ChatRoom() {
     }
   };
 
-  // Initialization
   useEffect(() => {
     isMounted.current = true;
     const unsubAuth = onAuthStateChanged(auth, async (currentUser) => {
@@ -200,7 +197,6 @@ export default function ChatRoom() {
     router.push("/messages");
   };
 
-  // NO CONFIRMATION ALERT HERE (As Requested)
   const handleDeleteMessage = async (msgId, forEveryone) => {
     const chatId = getChatId(user.uid, targetUserId);
     await deleteMessage(chatId, msgId, user.uid, forEveryone);
@@ -233,13 +229,17 @@ export default function ChatRoom() {
       <div className="flex-shrink-0 p-4 flex items-center justify-between bg-[#0a0a0a]/80 backdrop-blur-xl border-b border-white/5 z-10">
         <div className="flex items-center gap-4">
             <Link href="/messages" className="md:hidden p-2 -ml-2 hover:bg-white/10 rounded-full text-gray-400 hover:text-white"><ArrowLeft size={22} /></Link>
-            <div className="w-10 h-10 rounded-full p-[1.5px] bg-gradient-to-tr from-indigo-500 to-purple-500">
-                <img src={targetUser.dp || "/default-dp.png"} className="w-full h-full rounded-full object-cover bg-black" />
-            </div>
-            <div>
-                <h2 className="font-bold text-white text-base">{targetUser.name}</h2>
-                <p className="text-xs text-indigo-400 font-medium">@{targetUser.username}</p>
-            </div>
+            
+            {/* CLICKABLE PROFILE SECTION */}
+            <Link href={`/profile/${targetUser.uid}`} className="flex items-center gap-4 hover:opacity-80 transition cursor-pointer">
+                <div className="relative w-10 h-10 rounded-full p-[1.5px] bg-gradient-to-tr from-indigo-500 to-purple-500">
+                    <img src={targetUser.dp || "/default-dp.png"} className="w-full h-full rounded-full object-cover bg-black" />
+                </div>
+                <div>
+                    <h2 className="font-bold text-white text-base">{targetUser.name}</h2>
+                    <p className="text-xs text-indigo-400 font-medium">@{targetUser.username}</p>
+                </div>
+            </Link>
         </div>
         <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 rounded-full text-gray-400 hover:text-white"><MoreVertical size={20} /></button>
         <ChatMenu isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} onClearChat={handleClearChat} onBlockUser={handleBlockUser} />
@@ -255,7 +255,7 @@ export default function ChatRoom() {
                     key={msg.id} 
                     msg={msg} 
                     isMe={msg.senderId === user.uid}
-                    onContextMenu={handleContextMenu} // Pass the handler
+                    onContextMenu={handleContextMenu} 
                     onJumpTo={handleJumpTo}
                 />
             ))
@@ -292,44 +292,29 @@ export default function ChatRoom() {
         </div>
       </div>
 
-      {/* --- CONTEXT MENU (Rendered at Parent Level to fix Z-Index) --- */}
+      {/* --- CONTEXT MENU --- */}
       {contextMenu.visible && contextMenu.msg && (
         <div 
           style={{ top: contextMenu.y, left: contextMenu.x }}
           className="fixed z-50 w-40 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl overflow-hidden animate-scale-in"
           onClick={(e) => e.stopPropagation()}
         >
-          <button 
-            onClick={() => { setReplyMessage(contextMenu.msg); closeContextMenu(); }}
-            className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 flex items-center gap-2"
-          >
+          <button onClick={() => { setReplyMessage(contextMenu.msg); closeContextMenu(); }} className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 flex items-center gap-2">
             <Reply size={14} /> Reply
           </button>
-          
-          <button 
-            onClick={() => { navigator.clipboard.writeText(contextMenu.msg.text); closeContextMenu(); }}
-            className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 flex items-center gap-2"
-          >
+          <button onClick={() => { navigator.clipboard.writeText(contextMenu.msg.text); closeContextMenu(); }} className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 flex items-center gap-2">
             <Copy size={14} /> Copy
           </button>
 
-          {/* Logic for Delete Options */}
           {contextMenu.msg.senderId === user.uid && !contextMenu.msg.isDeleted && (
             <>
               <div className="h-px bg-white/10 my-1" />
-              <button 
-                onClick={() => handleDeleteMessage(contextMenu.msg.id, true)}
-                className="w-full text-left px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 flex items-center gap-2"
-              >
+              <button onClick={() => handleDeleteMessage(contextMenu.msg.id, true)} className="w-full text-left px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 flex items-center gap-2">
                 <Trash2 size={14} /> Unsend
               </button>
             </>
           )}
-          
-          <button 
-            onClick={() => handleDeleteMessage(contextMenu.msg.id, false)}
-            className="w-full text-left px-4 py-2.5 text-sm text-gray-400 hover:bg-white/5 flex items-center gap-2"
-          >
+          <button onClick={() => handleDeleteMessage(contextMenu.msg.id, false)} className="w-full text-left px-4 py-2.5 text-sm text-gray-400 hover:bg-white/5 flex items-center gap-2">
             <Trash2 size={14} /> Delete for me
           </button>
         </div>

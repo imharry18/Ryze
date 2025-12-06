@@ -11,6 +11,7 @@ export default function ChatSidebar({ user, className }) {
   const pathname = usePathname();
   const [usersMap, setUsersMap] = useState({});
   const [chatsData, setChatsData] = useState([]);
+  const [searchTerm, setSearchTerm] = useState(""); // Search State
 
   // 1. Fetch All Users
   useEffect(() => {
@@ -18,7 +19,7 @@ export default function ChatSidebar({ user, className }) {
     const unsub = onSnapshot(collection(db, "users"), (snap) => {
       const map = {};
       snap.docs.forEach((doc) => {
-        if (doc.id !== user.uid) map[doc.id] = { uid: doc.id, ...doc.data() };
+        map[doc.id] = { uid: doc.id, ...doc.data() };
       });
       setUsersMap(map);
     });
@@ -35,9 +36,13 @@ export default function ChatSidebar({ user, className }) {
     return () => unsub();
   }, [user]);
 
-  // 3. Process Lists
+  // 3. Process & Filter Lists
   const { interactedUsers, suggestedUsers } = useMemo(() => {
     if (!user) return { interactedUsers: [], suggestedUsers: [] };
+
+    const lowerTerm = searchTerm.toLowerCase(); // Prepare search term
+    const myProfile = usersMap[user.uid];
+    const myFollowingList = myProfile?.following || []; 
 
     const interactedList = [];
     const interactedIDs = new Set();
@@ -45,23 +50,22 @@ export default function ChatSidebar({ user, className }) {
     chatsData.forEach((chat) => {
       const otherUserId = chat.participants.find((id) => id !== user.uid);
       if (otherUserId && usersMap[otherUserId]) {
+        const partner = usersMap[otherUserId];
+        
+        // SEARCH FILTER (Skip if name doesn't match)
+        if (!partner.name.toLowerCase().includes(lowerTerm)) return;
+
         interactedIDs.add(otherUserId);
         
-        // --- CORE LOGIC FIX ---
-        // 1. Get count from DB
         let dbCount = chat.unreadCount?.[user.uid] || 0;
-        
-        // 2. Check if this chat is currently open
         const isChatOpen = pathname === `/messages/${otherUserId}`;
-        
-        // 3. If open, force count to 0 (Visually hide badge instantly)
         const finalCount = isChatOpen ? 0 : dbCount;
 
         interactedList.push({
-          ...usersMap[otherUserId],
+          ...partner,
           lastMessage: chat.lastMessage,
           lastMessageAt: chat.lastMessageAt?.seconds || 0,
-          unread: finalCount, // Pass the processed count
+          unread: finalCount,
         });
       }
     });
@@ -69,51 +73,78 @@ export default function ChatSidebar({ user, className }) {
     interactedList.sort((a, b) => b.lastMessageAt - a.lastMessageAt);
 
     const suggestionList = Object.values(usersMap)
-      .filter((u) => !interactedIDs.has(u.uid))
+      .filter((u) => {
+        if (u.uid === user.uid) return false; 
+        if (interactedIDs.has(u.uid)) return false; 
+        if (!myFollowingList.includes(u.uid)) return false;
+        
+        // SEARCH FILTER
+        return u.name.toLowerCase().includes(lowerTerm);
+      })
       .sort((a, b) => a.name.localeCompare(b.name));
 
     return { interactedUsers: interactedList, suggestedUsers: suggestionList };
-  }, [usersMap, chatsData, user, pathname]); // Added pathname dependency
+  }, [usersMap, chatsData, user, pathname, searchTerm]); // Dependencies updated
 
   return (
-    <aside className={`flex flex-col bg-[#0c0c0f] h-full ${className}`}>
+    <aside className={`flex flex-col bg-[#050505] border-r border-white/5 h-full ${className}`}>
         {/* Header */}
-        <div className="p-5 pb-3 bg-[#0c0c0f] z-10">
-          <div className="flex justify-between items-center mb-4">
-            <h1 className="text-2xl font-bold text-white">Chats</h1>
-            <div className="bg-white/5 border border-white/10 p-2 rounded-full">
-              <MessageCircle size={18} className="text-gray-400" />
+        <div className="p-5 pb-2 z-10">
+          <div className="flex justify-between items-center mb-5">
+            <h1 className="text-2xl font-bold text-white tracking-wide">Chats</h1>
+            <div className="p-2 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition-colors cursor-pointer group">
+              <MessageCircle size={18} className="text-gray-400 group-hover:text-cyan-400 transition-colors" />
             </div>
           </div>
-          <div className="bg-[#1a1a1a] rounded-xl flex items-center px-4 py-3 border border-white/5 focus-within:border-blue-500/50 transition-colors">
-            <Search size={18} className="text-gray-500" />
-            <input placeholder="Search people..." className="bg-transparent border-none focus:outline-none text-sm ml-3 text-white w-full placeholder:text-gray-600" />
+          
+          {/* Techy Search Bar */}
+          <div className="group relative mb-2">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search size={15} className="text-gray-600 group-focus-within:text-cyan-400 transition-colors duration-300" />
+            </div>
+            <input 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search people..." 
+              className="w-full bg-[#0f0f0f] border border-white/10 text-sm text-gray-300 rounded-xl py-2.5 pl-10 pr-4 
+                         focus:outline-none focus:border-cyan-500/40 focus:ring-1 focus:ring-cyan-500/20 
+                         focus:bg-[#141414] placeholder:text-gray-700 transition-all duration-300" 
+            />
           </div>
         </div>
 
-        {/* List */}
-        <div className="flex-1 overflow-y-auto px-3 pb-3 custom-scrollbar">
-          <div className="mb-2">
-            {interactedUsers.map((person) => (
-              <UserRow 
-                key={person.uid} 
-                person={person} 
-                isInteracted={true} 
-                isActive={pathname === `/messages/${person.uid}`} 
-              />
-            ))}
-            {interactedUsers.length === 0 && <div className="text-center py-6 text-gray-600 text-xs">No active chats</div>}
-          </div>
-
-          {suggestedUsers.length > 0 && (
-            <div className="flex items-center gap-3 my-4 px-2 opacity-50">
-              <div className="h-px bg-white/20 flex-1" />
-              <span className="text-[10px] uppercase tracking-widest text-gray-400">People</span>
-              <div className="h-px bg-white/20 flex-1" />
+        {/* List Area - HIDDEN SCROLLBAR */}
+        <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-1 
+                        scrollbar-none [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
+          
+          {/* Active Chats */}
+          {interactedUsers.map((person) => (
+            <UserRow 
+              key={person.uid} 
+              person={person} 
+              isInteracted={true} 
+              isActive={pathname === `/messages/${person.uid}`} 
+            />
+          ))}
+          
+          {interactedUsers.length === 0 && (
+            <div className="text-center py-12 opacity-30 select-none">
+              <p className="text-[10px] uppercase tracking-[0.2em] text-gray-500">No chats found</p>
             </div>
           )}
 
-          <div className="mb-2 opacity-80">
+          {/* Suggestions Header */}
+          {suggestedUsers.length > 0 && (
+            <div className="pt-6 pb-3 px-2">
+              <div className="flex items-center gap-3 opacity-40">
+                <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-cyan-300/70">People</span>
+                <div className="h-px bg-gradient-to-r from-cyan-500/30 to-transparent flex-1" />
+              </div>
+            </div>
+          )}
+
+          {/* Suggestions */}
+          <div className="space-y-1">
             {suggestedUsers.map((person) => (
               <UserRow 
                 key={person.uid} 
@@ -122,6 +153,12 @@ export default function ChatSidebar({ user, className }) {
                 isActive={pathname === `/messages/${person.uid}`} 
               />
             ))}
+            
+            {suggestedUsers.length === 0 && interactedUsers.length > 0 && searchTerm && (
+               <div className="text-center py-8 px-6">
+                  <p className="text-xs text-gray-700">No matches found.</p>
+               </div>
+            )}
           </div>
         </div>
     </aside>
