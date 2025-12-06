@@ -74,17 +74,22 @@ export default function ChatSidebar({ user, className }) {
 
     const suggestionList = Object.values(usersMap)
       .filter((u) => {
+        // 1. Exclude myself
         if (u.uid === user.uid) return false; 
+        
+        // 2. Exclude people I already have an active chat with (they are in the top list)
         if (interactedIDs.has(u.uid)) return false; 
+        
+        // 3. [UPDATED] Only show people I follow
         if (!myFollowingList.includes(u.uid)) return false;
         
-        // SEARCH FILTER
+        // 4. Search Filter (matches name)
         return u.name.toLowerCase().includes(lowerTerm);
       })
       .sort((a, b) => a.name.localeCompare(b.name));
 
     return { interactedUsers: interactedList, suggestedUsers: suggestionList };
-  }, [usersMap, chatsData, user, pathname, searchTerm]); // Dependencies updated
+  }, [usersMap, chatsData, user, pathname, searchTerm]); 
 
   return (
     <aside className={`flex flex-col bg-[#050505] border-r border-white/5 h-full ${className}`}>
