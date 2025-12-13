@@ -1,26 +1,24 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { collection, query, where, onSnapshot } from "firebase/firestore";
-import { db, auth } from "@/lib/firebase";
-import { onAuthStateChanged } from "firebase/auth";
 import { 
   Home, Search, PlusCircle, MessageSquare, TrendingUp, Settings, Ghost, Megaphone 
 } from "lucide-react";
 import UploadMenu from "@/components/layout/UploadMenu";
 import UploadModal from "@/components/upload/UploadModal";
+// Removed Firebase imports
 
 export default function Sidebar() {
   const pathname = usePathname();
   const [isUploadMenuOpen, setIsUploadMenuOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [uploadType, setUploadType] = useState(null);
-  const [totalUnread, setTotalUnread] = useState(0);
-  const [user, setUser] = useState(null);
   
-  // Timer ref for the delay
+  // Placeholder for notifications (Implement MongoDB notifications later)
+  const totalUnread = 0; 
+  
   const closeMenuTimer = useRef(null);
 
   const openModal = (type) => {
@@ -29,7 +27,6 @@ export default function Sidebar() {
     setIsUploadModalOpen(true);
   };
 
-  // Hover Handlers with Delay
   const handleMouseEnter = () => {
     if (closeMenuTimer.current) clearTimeout(closeMenuTimer.current);
     setIsUploadMenuOpen(true);
@@ -38,28 +35,8 @@ export default function Sidebar() {
   const handleMouseLeave = () => {
     closeMenuTimer.current = setTimeout(() => {
       setIsUploadMenuOpen(false);
-    }, 1000); // 1 second delay (as requested)
+    }, 1000);
   };
-
-  // Global Unread Listener
-  useEffect(() => {
-    const unsubAuth = onAuthStateChanged(auth, (currentUser) => {
-        setUser(currentUser);
-        if (currentUser) {
-            const q = query(collection(db, "chats"), where("participants", "array-contains", currentUser.uid));
-            const unsubChats = onSnapshot(q, (snap) => {
-                let count = 0;
-                snap.docs.forEach(doc => {
-                    const data = doc.data();
-                    count += (data.unreadCount?.[currentUser.uid] || 0);
-                });
-                setTotalUnread(count);
-            });
-            return () => unsubChats();
-        }
-    });
-    return () => unsubAuth();
-  }, []);
 
   return (
     <>
@@ -73,7 +50,7 @@ export default function Sidebar() {
             <SidebarLink href="/confessions" icon={<Ghost size={24} />} label="Confessions" isActive={pathname === "/confessions"} activeColor="text-pink-400" iconColor="text-pink-500" />
             <SidebarLink href="/notices" icon={<Megaphone size={24} />} label="Notices" isActive={pathname === "/notices"} activeColor="text-orange-400" iconColor="text-orange-500" />
 
-            {/* MESSAGES WITH BADGE */}
+            {/* MESSAGES */}
             <Link 
               href="/messages" 
               className={`flex items-center gap-4 p-3 rounded-xl transition-all duration-200 group relative ${
@@ -94,13 +71,12 @@ export default function Sidebar() {
               )}
             </Link>
 
-            {/* ADD Button (Wrapper) */}
+            {/* ADD Button */}
             <div 
               className="relative group"
               onMouseEnter={handleMouseEnter}
               onMouseLeave={handleMouseLeave}
             >
-                {/* Main Trigger Button */}
                 <button className="w-full flex items-center gap-4 p-3 rounded-xl transition-all duration-200 group text-gray-400 hover:bg-white/5 hover:text-gray-200 border border-transparent">
                   <div className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 group-hover:scale-110 transition-transform text-cyan-500">
                     <PlusCircle size={24} />
@@ -108,19 +84,13 @@ export default function Sidebar() {
                   <span className="text-base font-medium tracking-wide">Add</span>
                 </button>
                 
-                {/* Dropdown Menu Container */}
-                {/* Placed absolute relative to the button wrapper */}
                 {isUploadMenuOpen && (
                     <div 
-                      className="absolute left-full bottom-0 pl-6 z-50" // bottom-0 aligns bottoms, pl-6 is the safe bridge
+                      className="absolute left-full bottom-0 pl-6 z-50" 
                       onMouseEnter={handleMouseEnter}
                       onMouseLeave={handleMouseLeave}
                     >
-                        {/* The Menu Itself */}
                         <UploadMenu close={() => setIsUploadMenuOpen(false)} openModal={openModal} />
-                        
-                        {/* Little Triangle Pointer (Optional, purely visual) */}
-                        {/* <div className="absolute bottom-6 left-4 w-3 h-3 bg-[#18181b] border-l border-b border-white/10 transform rotate-45" /> */}
                     </div>
                 )}
             </div>

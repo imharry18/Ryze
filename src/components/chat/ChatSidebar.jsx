@@ -1,95 +1,16 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
-import { db } from "@/lib/firebase"; 
-import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { Search, MessageCircle } from "lucide-react";
 import UserRow from "./UserRow"; 
 
 export default function ChatSidebar({ user, className }) {
   const pathname = usePathname();
-  const [usersMap, setUsersMap] = useState({});
-  const [chatsData, setChatsData] = useState([]);
-  const [searchTerm, setSearchTerm] = useState(""); // Search State
-
-  // 1. Fetch All Users
-  useEffect(() => {
-    if (!user) return;
-    const unsub = onSnapshot(collection(db, "users"), (snap) => {
-      const map = {};
-      snap.docs.forEach((doc) => {
-        map[doc.id] = { uid: doc.id, ...doc.data() };
-      });
-      setUsersMap(map);
-    });
-    return () => unsub();
-  }, [user]);
-
-  // 2. Fetch My Chats
-  useEffect(() => {
-    if (!user) return;
-    const q = query(collection(db, "chats"), where("participants", "array-contains", user.uid));
-    const unsub = onSnapshot(q, (snap) => {
-      setChatsData(snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
-    });
-    return () => unsub();
-  }, [user]);
-
-  // 3. Process & Filter Lists
-  const { interactedUsers, suggestedUsers } = useMemo(() => {
-    if (!user) return { interactedUsers: [], suggestedUsers: [] };
-
-    const lowerTerm = searchTerm.toLowerCase(); // Prepare search term
-    const myProfile = usersMap[user.uid];
-    const myFollowingList = myProfile?.following || []; 
-
-    const interactedList = [];
-    const interactedIDs = new Set();
-
-    chatsData.forEach((chat) => {
-      const otherUserId = chat.participants.find((id) => id !== user.uid);
-      if (otherUserId && usersMap[otherUserId]) {
-        const partner = usersMap[otherUserId];
-        
-        // SEARCH FILTER (Skip if name doesn't match)
-        if (!partner.name.toLowerCase().includes(lowerTerm)) return;
-
-        interactedIDs.add(otherUserId);
-        
-        let dbCount = chat.unreadCount?.[user.uid] || 0;
-        const isChatOpen = pathname === `/messages/${otherUserId}`;
-        const finalCount = isChatOpen ? 0 : dbCount;
-
-        interactedList.push({
-          ...partner,
-          lastMessage: chat.lastMessage,
-          lastMessageAt: chat.lastMessageAt?.seconds || 0,
-          unread: finalCount,
-        });
-      }
-    });
-
-    interactedList.sort((a, b) => b.lastMessageAt - a.lastMessageAt);
-
-    const suggestionList = Object.values(usersMap)
-      .filter((u) => {
-        // 1. Exclude myself
-        if (u.uid === user.uid) return false; 
-        
-        // 2. Exclude people I already have an active chat with (they are in the top list)
-        if (interactedIDs.has(u.uid)) return false; 
-        
-        // 3. [UPDATED] Only show people I follow
-        if (!myFollowingList.includes(u.uid)) return false;
-        
-        // 4. Search Filter (matches name)
-        return u.name.toLowerCase().includes(lowerTerm);
-      })
-      .sort((a, b) => a.name.localeCompare(b.name));
-
-    return { interactedUsers: interactedList, suggestedUsers: suggestionList };
-  }, [usersMap, chatsData, user, pathname, searchTerm]); 
+  const [searchTerm, setSearchTerm] = useState("");
+  // Placeholder data until Messaging API is fully integrated
+  const interactedUsers = []; 
+  const suggestedUsers = []; 
 
   return (
     <aside className={`flex flex-col bg-[#050505] border-r border-white/5 h-full ${className}`}>
@@ -102,7 +23,6 @@ export default function ChatSidebar({ user, className }) {
             </div>
           </div>
           
-          {/* Techy Search Bar */}
           <div className="group relative mb-2">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search size={15} className="text-gray-600 group-focus-within:text-cyan-400 transition-colors duration-300" />
@@ -118,53 +38,12 @@ export default function ChatSidebar({ user, className }) {
           </div>
         </div>
 
-        {/* List Area - HIDDEN SCROLLBAR */}
-        <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-1 
-                        scrollbar-none [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
-          
-          {/* Active Chats */}
-          {interactedUsers.map((person) => (
-            <UserRow 
-              key={person.uid} 
-              person={person} 
-              isInteracted={true} 
-              isActive={pathname === `/messages/${person.uid}`} 
-            />
-          ))}
-          
+        <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-1">
           {interactedUsers.length === 0 && (
             <div className="text-center py-12 opacity-30 select-none">
               <p className="text-[10px] uppercase tracking-[0.2em] text-gray-500">No chats found</p>
             </div>
           )}
-
-          {/* Suggestions Header */}
-          {suggestedUsers.length > 0 && (
-            <div className="pt-6 pb-3 px-2">
-              <div className="flex items-center gap-3 opacity-40">
-                <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-cyan-300/70">People</span>
-                <div className="h-px bg-gradient-to-r from-cyan-500/30 to-transparent flex-1" />
-              </div>
-            </div>
-          )}
-
-          {/* Suggestions */}
-          <div className="space-y-1">
-            {suggestedUsers.map((person) => (
-              <UserRow 
-                key={person.uid} 
-                person={person} 
-                isInteracted={false} 
-                isActive={pathname === `/messages/${person.uid}`} 
-              />
-            ))}
-            
-            {suggestedUsers.length === 0 && interactedUsers.length > 0 && searchTerm && (
-               <div className="text-center py-8 px-6">
-                  <p className="text-xs text-gray-700">No matches found.</p>
-               </div>
-            )}
-          </div>
         </div>
     </aside>
   );

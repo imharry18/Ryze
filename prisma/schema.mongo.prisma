@@ -1,0 +1,51 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "./generated/mongo_client"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("MONGODB_URI")
+}
+
+model Post {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String   // Links to Postgres User ID
+  
+  caption       String?
+  location      String?
+  mediaUrl      String?
+  mediaType     String?  // 'image', 'video'
+  postType      String   @default("post")
+  category      String?
+  isAnonymous   Boolean  @default(false)
+  
+  likesCount    Int      @default(0)
+  commentsCount Int      @default(0)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("posts")
+}
+
+model Chat {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  participantIds String[] // Array of Postgres User IDs
+  messages      Message[]
+}
+
+model Message {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  chatId        String   @db.ObjectId
+  chat          Chat     @relation(fields: [chatId], references: [id])
+  
+  senderId      String   // Postgres User ID
+  text          String
+  read          Boolean  @default(false)
+  
+  createdAt     DateTime @default(now())
+}

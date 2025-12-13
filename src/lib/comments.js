@@ -1,32 +1,19 @@
-import { db } from "@/lib/firebase";
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot } from "firebase/firestore";
+// src/lib/comments.js
+
+// Placeholder functions to prevent build errors
+// We will replace this with a MongoDB API call later.
 
 export async function addComment(postId, uid, text) {
-  if (!text.trim()) return;
-
-  try {
-    await addDoc(collection(db, "posts", postId, "comments"), {
-      uid,
-      text,
-      createdAt: serverTimestamp(),
-    });
-
-    return { success: true };
-
-  } catch (err) {
-    console.error(err);
-    return { success: false, error: err.message };
-  }
+  console.log("Add Comment (Mongo TODO):", postId, text);
+  return { success: true };
 }
 
 export function listenComments(postId, callback) {
-  const q = query(
-    collection(db, "posts", postId, "comments"),
-    orderBy("createdAt", "asc")
-  );
-
-  return onSnapshot(q, (snap) => {
-    const comments = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    callback(comments);
-  });
+  console.log("Listen Comments (Mongo TODO):", postId);
+  // Return dummy data for now
+  callback([
+    { id: "1", text: "Comments coming soon!", createdAt: new Date() }
+  ]);
+  // Return a dummy unsubscribe function
+  return () => {};
 }

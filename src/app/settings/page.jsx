@@ -1,15 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { auth, db } from "@/lib/firebase";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
-import { 
-  updatePassword, 
-  sendPasswordResetEmail, 
-  deleteUser, 
-  signOut 
-} from "firebase/auth";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/hooks/useAuth"; // Uses NextAuth now
+import { signOut } from "next-auth/react"; 
+import { updateSettings } from "@/lib/actions/settings"; // Import Server Action
 import { toast } from "sonner";
 
 // UI Components
@@ -31,106 +26,62 @@ import {
 
 export default function SettingsPage() {
   const router = useRouter();
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("account"); // account | privacy | notifications | display
+  const { user, loading } = useAuth();
+  const [activeTab, setActiveTab] = useState("account");
 
   // Form States
   const [passwordData, setPasswordData] = useState({ new: "", confirm: "" });
-  const [userSettings, setUserSettings] = useState({});
+  const [settings, setSettings] = useState({
+    showOnlineStatus: true,
+    readReceipts: true,
+    notifications: { messages: true, posts: true }
+  });
 
-  // 1. Load User & Settings
-  useEffect(() => {
-    const unsub = auth.onAuthStateChanged(async (currentUser) => {
-      if (!currentUser) {
-        router.push("/login");
-        return;
-      }
-      setUser(currentUser);
-
-      // Fetch Settings from Firestore
-      try {
-        const ref = doc(db, "users", currentUser.uid);
-        const snap = await getDoc(ref);
-        if (snap.exists()) {
-          setUserSettings(snap.data());
-        }
-      } catch (err) {
-        toast.error("Failed to load settings.");
-      } finally {
-        setLoading(false);
-      }
-    });
-    return () => unsub();
-  }, [router]);
-
-  // 2. Handle Setting Toggles (Auto-Save)
-  const toggleSetting = async (category, field) => {
-    // Optimistic UI update
-    const newValue = category 
-      ? !userSettings[category]?.[field] 
-      : !userSettings[field];
-
-    setUserSettings((prev) => {
-      if (category) {
-        return { ...prev, [category]: { ...prev[category], [field]: newValue } };
-      }
-      return { ...prev, [field]: newValue };
-    });
-
-    try {
-      const ref = doc(db, "users", user.uid);
-      const updateData = category 
-        ? { [`${category}.${field}`]: newValue }
-        : { [field]: newValue };
-      
-      await updateDoc(ref, updateData);
-      toast.success("Setting updated");
-    } catch (err) {
-      toast.error("Failed to save setting");
-      // Revert on error (optional: reload data)
-    }
+  const handleLogout = async () => {
+    await signOut({ callbackUrl: "/login" });
   };
 
-  // 3. Password Update Handler
-  const handleUpdatePassword = async () => {
-    if (passwordData.new.length < 6) {
-      return toast.error("Password must be at least 6 characters");
+  const toggleSetting = (category, field) => {
+    // Optimistic UI update (Implementation of persistence depends on schema)
+    if (category) {
+        setSettings(prev => ({
+            ...prev,
+            [category]: { ...prev[category], [field]: !prev[category][field] }
+        }));
+    } else {
+        setSettings(prev => ({ ...prev, [field]: !prev[field] }));
     }
+    toast.success("Setting updated (Session only)");
+  };
+
+  const handleUpdatePassword = async () => {
     if (passwordData.new !== passwordData.confirm) {
       return toast.error("Passwords do not match");
     }
 
     const loadingToast = toast.loading("Updating password...");
+    
     try {
-      await updatePassword(user, passwordData.new);
-      toast.dismiss(loadingToast);
-      toast.success("Password updated successfully!");
-      setPasswordData({ new: "", confirm: "" });
-    } catch (err) {
-      toast.dismiss(loadingToast);
-      if (err.code === 'auth/requires-recent-login') {
-        toast.error("Please re-login to change password for security.");
-        // Optional: logout user here
+      const res = await updateSettings(user.id, { 
+        type: "password", 
+        newPassword: passwordData.new 
+      });
+
+      if (res.success) {
+        toast.dismiss(loadingToast);
+        toast.success("Password updated successfully!");
+        setPasswordData({ new: "", confirm: "" });
       } else {
-        toast.error(err.message);
+        throw new Error(res.error);
       }
-    }
-  };
-
-  // 4. Reset Password Email
-  const handleResetEmail = async () => {
-    try {
-      await sendPasswordResetEmail(auth, user.email);
-      toast.success(`Reset link sent to ${user.email}`);
     } catch (err) {
-      toast.error("Failed to send reset email");
+      toast.dismiss(loadingToast);
+      toast.error(err.message || "Failed to update password");
     }
   };
 
-  if (loading) return <div className="mt-40 text-center text-white">Loading settings...</div>;
-
-  // --- Components for Tabs ---
+  if (loading) return <div className="h-screen flex items-center justify-center text-white"><Loader2 className="animate-spin" /></div>;
+  if (!user) return null;
 
   const SidebarItem = ({ id, label, icon: Icon, danger = false }) => (
     <button
@@ -164,7 +115,7 @@ export default function SettingsPage() {
         <SidebarItem id="security" label="Login & Security" icon={Lock} />
         
         <button
-          onClick={() => { signOut(auth); router.push("/login"); }}
+          onClick={handleLogout}
           className="w-full flex items-center gap-3 px-4 py-3 text-red-400 hover:bg-red-900/10 rounded-xl transition-colors"
         >
           <LogOut size={18} /> Sign Out
@@ -185,13 +136,13 @@ export default function SettingsPage() {
             <div className="space-y-4 max-w-md">
               <div>
                 <Label>Email Address</Label>
-                <Input disabled value={user.email} className="bg-white/5 border-transparent opacity-60" />
-                <p className="text-xs text-gray-500 mt-1">Email cannot be changed manually.</p>
+                <Input disabled value={user.email || ""} className="bg-white/5 border-transparent opacity-60" />
+                <p className="text-xs text-gray-500 mt-1">Email cannot be changed.</p>
               </div>
               
               <div>
                 <Label>Username</Label>
-                <Input disabled value={`@${userSettings.username}`} className="bg-white/5 border-transparent opacity-60" />
+                <Input disabled value={`@${user.username || "user"}`} className="bg-white/5 border-transparent opacity-60" />
               </div>
             </div>
 
@@ -199,17 +150,14 @@ export default function SettingsPage() {
                <h3 className="text-red-400 font-semibold mb-4 flex items-center gap-2">
                  <Trash2 size={18} /> Danger Zone
                </h3>
-               <p className="text-gray-400 text-sm mb-4">
-                 Deleting your account is permanent. All your data, posts, and connections will be wiped.
-               </p>
-               <Button variant="destructive" onClick={() => alert("Please contact support to delete account (Safety Feature).")}>
+               <Button variant="destructive" onClick={() => alert("Please contact support to delete account.")}>
                  Delete Account
                </Button>
             </div>
           </div>
         )}
 
-        {/* --- SECURITY TAB (Password) --- */}
+        {/* --- SECURITY TAB --- */}
         {activeTab === "security" && (
            <div className="space-y-8 animate-fadeIn">
              <div>
@@ -242,7 +190,6 @@ export default function SettingsPage() {
                  
                  <div className="flex gap-3 pt-2">
                    <Button onClick={handleUpdatePassword}>Update Password</Button>
-                   <Button variant="outline" onClick={handleResetEmail}>Send Reset Link instead</Button>
                  </div>
                </div>
              </div>
@@ -254,101 +201,21 @@ export default function SettingsPage() {
           <div className="space-y-6 animate-fadeIn">
             <div>
               <h2 className="text-xl font-bold text-white mb-1">Privacy</h2>
-              <p className="text-gray-400 text-sm">Control who can see you and message you.</p>
+              <p className="text-gray-400 text-sm">Control visibility.</p>
             </div>
 
             <div className="space-y-6 max-w-2xl">
-              {/* Item */}
               <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5">
                 <div>
                   <h4 className="text-white font-medium">Online Status</h4>
-                  <p className="text-gray-400 text-sm">Let others see when you are active.</p>
+                  <p className="text-gray-400 text-sm">Show when you are active.</p>
                 </div>
                 <Switch 
-                  checked={userSettings.showOnlineStatus} 
+                  checked={settings.showOnlineStatus} 
                   onCheckedChange={() => toggleSetting(null, "showOnlineStatus")} 
                 />
               </div>
-
-              {/* Item */}
-              <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5">
-                <div>
-                  <h4 className="text-white font-medium">Read Receipts</h4>
-                  <p className="text-gray-400 text-sm">Show when you've read a message.</p>
-                </div>
-                <Switch 
-                  checked={userSettings.readReceipts} 
-                  onCheckedChange={() => toggleSetting(null, "readReceipts")} 
-                />
-              </div>
-
-              {/* Item */}
-              <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5">
-                <div>
-                  <h4 className="text-white font-medium">Search Visibility</h4>
-                  <p className="text-gray-400 text-sm">Allow people to find you by your name or roll number.</p>
-                </div>
-                <Switch defaultChecked disabled /> 
-              </div>
             </div>
-          </div>
-        )}
-
-        {/* --- NOTIFICATIONS TAB --- */}
-        {activeTab === "notifications" && (
-          <div className="space-y-6 animate-fadeIn">
-            <div>
-              <h2 className="text-xl font-bold text-white mb-1">Notifications</h2>
-              <p className="text-gray-400 text-sm">Choose what you want to be notified about.</p>
-            </div>
-
-            <div className="space-y-1 max-w-2xl">
-              {/* Helper function for notification items */}
-              {[
-                { id: "messages", label: "Direct Messages", desc: "New messages from your connections" },
-                { id: "mentions", label: "Mentions & Tags", desc: "When someone tags you in a post or comment" },
-                { id: "posts", label: "Community Posts", desc: "Trending posts from your communities" },
-                { id: "links", label: "Connection Requests", desc: "When someone wants to connect with you" },
-              ].map((item) => (
-                <div key={item.id} className="flex items-center justify-between py-4 border-b border-white/10 last:border-0">
-                  <div>
-                    <h4 className="text-white font-medium">{item.label}</h4>
-                    <p className="text-gray-400 text-sm">{item.desc}</p>
-                  </div>
-                  <Switch 
-                    checked={userSettings.notifications?.[item.id]} 
-                    onCheckedChange={() => toggleSetting("notifications", item.id)} 
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-         {/* --- DISPLAY TAB --- */}
-         {activeTab === "display" && (
-          <div className="space-y-6 animate-fadeIn">
-            <div>
-              <h2 className="text-xl font-bold text-white mb-1">Display & Accessibility</h2>
-              <p className="text-gray-400 text-sm">Manage your theme preferences.</p>
-            </div>
-
-            <div className="grid grid-cols-3 gap-4 max-w-lg">
-               {['system', 'dark', 'light'].map((theme) => (
-                 <button
-                   key={theme}
-                   onClick={() => toggleSetting(null, "theme")} // Ideally this needs logic to set specific value
-                   className={`p-4 rounded-xl border text-center capitalize transition-all ${
-                     userSettings.theme === theme 
-                      ? "bg-blue-600/20 border-blue-500 text-white" 
-                      : "bg-white/5 border-white/10 text-gray-400 hover:bg-white/10"
-                   }`}
-                 >
-                   {theme}
-                 </button>
-               ))}
-            </div>
-            <p className="text-gray-500 text-xs mt-2">*Currently locked to Dark Mode by Ryze System Default.</p>
           </div>
         )}
 

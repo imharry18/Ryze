@@ -1,43 +1,70 @@
-import { useState, useCallback } from "react";
-import { uploadPostAndMedia } from "@/lib/uploadPost";
-import { storage, db } from "@/lib/firebase";
+"use client";
+
+import { useState } from "react";
 
 export default function useUpload() {
-  const [progress, setProgress] = useState(0);
   const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState("");
-  const [successId, setSuccessId] = useState(null);
+  const [progress, setProgress] = useState(0);
+  const [error, setError] = useState(null);
 
-  // Updated signature to accept extraData
-  const upload = useCallback(async ({ uid, file, mediaType, caption, location, postType, extraData = {} }) => {
-    setError("");
-    setSuccessId(null);
+  const upload = async ({ uid, file, mediaType, caption, location, postType, extraData }) => {
     setUploading(true);
-    setProgress(0);
+    setError(null);
+    setProgress(10); // Start visual progress
 
     try {
-      const r = await uploadPostAndMedia({
-        storage,
-        db,
-        uid,
-        file,
-        mediaType,
-        caption,
-        location, 
-        postType,
-        extraData, // Pass it down
-        onProgress: (p) => setProgress(p),
-      });
-      setSuccessId(r.postId);
-      setUploading(false);
-      return r;
-    } catch (e) {
-      console.error("upload failed", e);
-      setError(e.message || "Upload failed");
-      setUploading(false);
-      throw e;
-    }
-  }, []);
+      const formData = new FormData();
+      formData.append("userId", uid); // Sending Postgres ID
+      
+      if (file) {
+        formData.append("file", file);
+      }
+      
+      formData.append("caption", caption || "");
+      formData.append("location", location || "");
+      formData.append("mediaType", mediaType || "image");
+      formData.append("postType", postType || "post");
 
-  return { upload, progress, uploading, error, successId, reset: () => { setProgress(0); setUploading(false); setError(""); setSuccessId(null); } };
+      if (extraData) {
+        formData.append("extraData", JSON.stringify(extraData));
+      }
+
+      // Simulate Progress (Native fetch doesn't support upload progress easily)
+      const interval = setInterval(() => {
+        setProgress((prev) => (prev >= 90 ? 90 : prev + 10));
+      }, 500);
+
+      const response = await fetch("/api/posts/create", {
+        method: "POST",
+        body: formData,
+      });
+
+      clearInterval(interval);
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Upload failed");
+      }
+
+      setProgress(100);
+      setUploading(false);
+      return data.post;
+
+    } catch (err) {
+      console.error("Upload Hook Error:", err);
+      setError(err.message);
+      setUploading(false);
+      setProgress(0);
+      throw err;
+    }
+  };
+
+  const reset = () => {
+    setUploading(false);
+    setProgress(0);
+    setError(null);
+  };
+
+  return { upload, uploading, progress, error, reset };
 }

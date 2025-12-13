@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { auth, db } from "@/lib/firebase";
-import { doc, getDoc } from "firebase/firestore";
-import { updateUser } from "@/lib/actions/updateUser";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
+import { updateUser } from "@/lib/actions/updateUser"; // New Server Action
 
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
@@ -17,53 +16,29 @@ import Link from "next/link";
 
 export default function EditProfilePage() {
   const router = useRouter();
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user } = useAuth();
+  
   const [userData, setUserData] = useState({
     name: "",
     username: "",
     bio: "",
-    college: "",
-    year: "",
     branch: "",
-    rollNo: "",
-    allowMessagesFrom: "everyone",
-    showOnlineStatus: true,
-    theme: "system",
-    dp: "/default-dp.png",
   });
-
   const [dpFile, setDpFile] = useState(null);
   const [dpPreview, setDpPreview] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    const unsub = auth.onAuthStateChanged((user) => {
-      if (user) {
-        setCurrentUser(user);
-        fetchData(user.uid);
-      } else {
-        router.push("/login");
-      }
-    });
-    return () => unsub();
-  }, [router]);
-
-  async function fetchData(uid) {
-    try {
-      const ref = doc(db, "users", uid);
-      const snap = await getDoc(ref);
-      if (snap.exists()) {
-        const data = snap.data();
-        setUserData((prev) => ({ ...prev, ...data }));
-        setDpPreview(data.dp || "/default-dp.png");
-      }
-    } catch (error) {
-      toast.error("Failed to load profile data.");
-    } finally {
-      setLoading(false);
+    if (user) {
+        setUserData({
+            name: user.name || "",
+            username: user.username || "",
+            bio: user.bio || "",
+            branch: user.branch || "",
+        });
+        setDpPreview(user.image || "/default-dp.png");
     }
-  }
+  }, [user]);
 
   function handleDpChange(e) {
     const file = e.target.files[0];
@@ -78,39 +53,37 @@ export default function EditProfilePage() {
   };
 
   async function handleSave() {
-    if (!userData.name || !userData.username) {
-      toast.error("Name and Username are required.");
-      return;
-    }
-
     setSaving(true);
-    toast.loading("Updating profile...");
-
     try {
-      const res = await updateUser(currentUser.uid, userData, dpFile);
+      const formData = new FormData();
+      formData.append("name", userData.name);
+      formData.append("username", userData.username);
+      formData.append("bio", userData.bio);
+      formData.append("branch", userData.branch);
+      if (dpFile) formData.append("file", dpFile);
+
+      const res = await updateUser(user.id, formData);
+      
       if (res.success) {
-        toast.dismiss();
         toast.success("Profile updated!");
-        router.refresh();
-        // Redirect back to the unified profile page
-        router.push(`/profile/${currentUser.uid}`); 
+        // Force refresh to update session data if possible, or redirect
+        window.location.href = `/profile/${user.id}`;
       } else {
         throw new Error(res.error);
       }
     } catch (error) {
-      toast.dismiss();
       toast.error(error.message);
     } finally {
       setSaving(false);
     }
   }
 
-  if (loading) return <div className="h-screen flex items-center justify-center text-white"><Loader2 className="animate-spin" /></div>;
+  if (!user) return null;
 
   return (
     <div className="pt-24 max-w-2xl mx-auto text-white px-4 pb-20 animate-fadeIn">
       
-      <Link href={`/profile/${currentUser?.uid}`} className="flex items-center text-gray-400 hover:text-white mb-6 transition">
+      <Link href={`/profile/${user.id}`} className="flex items-center text-gray-400 hover:text-white mb-6 transition">
         <ArrowLeft size={20} className="mr-2" /> Back to Profile
       </Link>
 
@@ -147,16 +120,9 @@ export default function EditProfilePage() {
           <Textarea value={userData.bio} onChange={(e) => handleChange("bio", e.target.value)} rows={4} className="bg-black/20" />
         </div>
 
-        {/* College Info (Read Only or Editable depending on your policy) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <Label className="mb-2 block">College</Label>
-            <Input value={userData.college} disabled className="opacity-60 cursor-not-allowed" />
-          </div>
-          <div>
+        <div>
             <Label className="mb-2 block">Branch</Label>
             <Input value={userData.branch} onChange={(e) => handleChange("branch", e.target.value)} />
-          </div>
         </div>
 
         <Button className="w-full h-12 text-lg font-bold mt-6" onClick={handleSave} disabled={saving}>

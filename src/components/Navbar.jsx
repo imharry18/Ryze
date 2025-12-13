@@ -1,10 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { doc, onSnapshot } from "firebase/firestore";
-import { signOut } from "firebase/auth";
+import { signOut, useSession } from "next-auth/react";
 
 import {
   Menu,
@@ -15,47 +14,27 @@ import {
   Bell
 } from "lucide-react";
 
-import { useAuth } from "@/hooks/useAuth";
-import { useNotifications } from "@/hooks/useNotifications";
-import { auth, db } from "@/lib/firebase";
-
 import { Button } from "./ui/Button";
 
 export default function Navbar() {
-
-  const { user, loading } = useAuth();
-  // Fetch notification count
-  const { requestCount } = useNotifications(user?.uid); 
+  const { data: session, status } = useSession();
+  const loading = status === "loading";
+  const user = session?.user;
 
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isAccountMenu, setIsAccountMenu] = useState(false);
-  
-  // State for Firestore Profile Data
-  const [profile, setProfile] = useState(null);
 
-  // Fetch Firestore Profile (Username & DP) Realtime
-  useEffect(() => {
-    if (!user?.uid) return;
-
-    const unsub = onSnapshot(doc(db, "users", user.uid), (docSnap) => {
-      if (docSnap.exists()) {
-        setProfile(docSnap.data());
-      }
-    });
-
-    return () => unsub();
-  }, [user]);
+  const requestCount = 0; // Placeholder for now
 
   const handleLogout = async () => {
-    await signOut(auth);
-    window.location.href = "/login";
+    await signOut({ callbackUrl: "/login" });
   };
 
   if (loading) {
     return (
       <nav className="w-full fixed top-0 left-0 z-50 bg-black/80 backdrop-blur-xl border-b border-white/10 shadow-lg">
         <div className="max-w-7xl mx-auto flex items-center justify-between px-4 py-3">
-          {/* Minimal Loading State */}
+          <div className="h-8 w-8" />
         </div>
       </nav>
     );
@@ -104,16 +83,14 @@ export default function Navbar() {
                 >
                   <div className="relative h-8 w-8 rounded-full overflow-hidden border border-white/20 bg-gray-800">
                       <Image 
-                          // Priority: Firestore DP -> Auth Photo -> Default
-                          src={profile?.dp || user.photoURL || "/default-dp.png"} 
+                          src={user.image || "/default-dp.png"} 
                           alt="Profile" 
                           fill 
                           className="object-cover"
                       />
                   </div>
                   <span className="hidden md:block text-sm font-bold text-white max-w-[150px] truncate">
-                      {/* Priority: Firestore Username -> Auth DisplayName -> Fallback */}
-                      {profile?.username || user.displayName || "User"}
+                      {user.username || user.name || "User"}
                   </span>
                 </div>
 
@@ -122,13 +99,13 @@ export default function Navbar() {
                   <div className="absolute right-0 mt-2 bg-[#121212] text-white w-56 rounded-xl shadow-2xl border border-white/10 backdrop-blur-xl py-2 z-50 animate-fadeIn">
                     <div className="px-4 py-3 border-b border-white/10 mb-2">
                       <p className="text-sm font-bold text-white">
-                        @{profile?.username || "username"}
+                        @{user.username}
                       </p>
                       <p className="text-xs text-gray-500 truncate">{user.email}</p>
                     </div>
 
                     <Link
-                      href="/profile"
+                      href={`/profile/${user.id}`}
                       className="flex items-center gap-3 px-4 py-2.5 hover:bg-white/5 text-sm text-gray-300 hover:text-white transition"
                       onClick={() => setIsAccountMenu(false)}
                     >
