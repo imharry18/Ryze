@@ -1,324 +1,156 @@
 "use client";
 
-import { useEffect, useState, useRef, useLayoutEffect } from "react";
-import { auth, db } from "@/lib/firebase";
-import { collection, query, orderBy, onSnapshot, doc, getDoc, updateDoc, writeBatch, where, getDocs } from "firebase/firestore";
-import { onAuthStateChanged } from "firebase/auth";
-import { useParams, useRouter } from "next/navigation";
-import { getChatId, sendMessage, clearChatHistory, blockUser, deleteMessage } from "@/lib/actions/social"; 
-import { Send, ArrowLeft, MoreVertical, X, CornerDownLeft, Reply, Copy, Trash2 } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { useParams } from "next/navigation";
 import Link from "next/link";
-import ChatMenu from "@/components/chat/ChatMenu";
-import MessageBubble from "@/components/chat/MessageBubble";
+import { Send, ArrowLeft, Loader2 } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function ChatRoom() {
-  const { id: targetUserId } = useParams();
-  const router = useRouter();
+  const params = useParams(); // Next.js 15+ way
+  const chatPartnerId = params.id;
   
-  // User State
-  const [user, setUser] = useState(null);
-  const [targetUser, setTargetUser] = useState(null);
-  
-  // Chat State
+  const { user } = useAuth();
   const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState("");
-  const [partnerTyping, setPartnerTyping] = useState(false);
-  const [clearedAt, setClearedAt] = useState(null); 
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
-  
-  // UI State
-  const [isMenuOpen, setIsMenuOpen] = useState(false); // Top header menu
-  const [replyMessage, setReplyMessage] = useState(null);
-  
-  // --- CONTEXT MENU STATE ---
-  const [contextMenu, setContextMenu] = useState({ 
-    visible: false, 
-    x: 0, 
-    y: 0, 
-    msg: null 
-  });
+  const [inputText, setInputText] = useState("");
+  const [partner, setPartner] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const messagesEndRef = useRef(null);
 
-  // Refs
-  const typingTimeoutRef = useRef(null);
-  const scrollRef = useRef(null);
-  const inputRef = useRef(null); 
-  const isMounted = useRef(true);
+  // 1. Fetch Partner Details
+  useEffect(() => {
+    async function fetchPartner() {
+      const res = await fetch(`/api/users/${chatPartnerId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setPartner(data);
+      }
+    }
+    if (chatPartnerId) fetchPartner();
+  }, [chatPartnerId]);
 
-  // --- HANDLERS: Context Menu ---
-  const handleContextMenu = (e, msg) => {
+  // 2. Fetch Messages (Polling every 3 seconds)
+  useEffect(() => {
+    async function fetchMessages() {
+      try {
+        const res = await fetch(`/api/messages/${chatPartnerId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setMessages(data);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchMessages();
+    const interval = setInterval(fetchMessages, 3000); // Poll every 3s
+    return () => clearInterval(interval);
+  }, [chatPartnerId]);
+
+  // Scroll to bottom on new message
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // 3. Send Message
+  const handleSend = async (e) => {
     e.preventDefault();
-    const x = Math.min(e.clientX, window.innerWidth - 170); 
-    const y = Math.min(e.clientY, window.innerHeight - 200);
-    
-    setContextMenu({
-      visible: true,
-      x,
-      y,
-      msg
-    });
-  };
+    if (!inputText.trim()) return;
 
-  const closeContextMenu = () => {
-    if (contextMenu.visible) {
-      setContextMenu({ ...contextMenu, visible: false });
-    }
-  };
-
-  // Global Click Listener to close menu
-  useEffect(() => {
-    window.addEventListener("click", closeContextMenu);
-    return () => window.removeEventListener("click", closeContextMenu);
-  }, [contextMenu.visible]);
-
-  // --- Global Auto-Focus ---
-  useEffect(() => {
-    const handleGlobalKeyDown = (e) => {
-      const activeTag = document.activeElement?.tagName?.toLowerCase();
-      if (activeTag === "input" || activeTag === "textarea") return;
-      if (e.ctrlKey || e.altKey || e.metaKey) return;
-      if (e.key.length === 1) inputRef.current?.focus();
+    const tempMsg = {
+        senderId: user.uid,
+        text: inputText,
+        createdAt: new Date().toISOString(),
+        _id: "temp-" + Date.now()
     };
-    window.addEventListener("keydown", handleGlobalKeyDown);
-    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
-  }, []);
 
-  // Focus on Reply
-  useEffect(() => {
-    if (replyMessage) inputRef.current?.focus();
-  }, [replyMessage]);
+    // Optimistic Update
+    setMessages(prev => [...prev, tempMsg]);
+    setInputText("");
 
-  // Scroll Logic
-  useLayoutEffect(() => {
-    if (scrollRef.current) {
-      const container = scrollRef.current;
-      container.scrollTo({
-        top: container.scrollHeight,
-        behavior: isInitialLoad ? "auto" : "smooth"
-      });
-    }
-  }, [messages, isInitialLoad]);
-
-  // --- FIREBASE LOGIC ---
-  const markRead = async (currentUserId, targetId, chatId) => {
-    if (!currentUserId || !targetId) return;
-    await updateDoc(doc(db, "chats", chatId), { [`unreadCount.${currentUserId}`]: 0 }).catch(() => {});
-    const q = query(collection(db, "chats", chatId, "messages"), where("senderId", "==", targetId), where("read", "==", false));
-    const snapshot = await getDocs(q);
-    if (!snapshot.empty) {
-      const batch = writeBatch(db);
-      snapshot.docs.forEach((doc) => batch.update(doc.ref, { read: true }));
-      await batch.commit();
+    try {
+        await fetch("/api/messages", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ receiverId: chatPartnerId, text: tempMsg.text })
+        });
+        // Polling will catch the real message shortly
+    } catch (error) {
+        console.error("Failed to send", error);
     }
   };
 
-  useEffect(() => {
-    isMounted.current = true;
-    const unsubAuth = onAuthStateChanged(auth, async (currentUser) => {
-      if (!currentUser) return router.push("/login");
-      setUser(currentUser);
-
-      const targetSnap = await getDoc(doc(db, "users", targetUserId));
-      if (targetSnap.exists()) setTargetUser(targetSnap.data());
-
-      const chatId = getChatId(currentUser.uid, targetUserId);
-      markRead(currentUser.uid, targetUserId, chatId);
-
-      const unsubMeta = onSnapshot(doc(db, "chats", chatId), (docSnap) => {
-        if (!isMounted.current) return;
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          setPartnerTyping(data.typing && data.typing[targetUserId]);
-          if (data.clearedAt && data.clearedAt[currentUser.uid]) setClearedAt(data.clearedAt[currentUser.uid]);
-          if (data.unreadCount && data.unreadCount[currentUser.uid] > 0) {
-             updateDoc(doc(db, "chats", chatId), { [`unreadCount.${currentUser.uid}`]: 0 }).catch(()=>{});
-          }
-        }
-      });
-
-      const q = query(collection(db, "chats", chatId, "messages"), orderBy("createdAt", "asc"));
-      const unsubMsg = onSnapshot(q, (snap) => {
-        if (!isMounted.current) return;
-        const msgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        setMessages(msgs);
-        setIsInitialLoad(false);
-        
-        const lastMsg = msgs[msgs.length - 1];
-        if (lastMsg && lastMsg.senderId === targetUserId && !lastMsg.read) {
-           markRead(currentUser.uid, targetUserId, chatId);
-        }
-      });
-
-      return () => { unsubMsg(); unsubMeta(); };
-    });
-    return () => { isMounted.current = false; return unsubAuth(); };
-  }, [targetUserId, router]);
-
-  // --- ACTION HANDLERS ---
-  const handleSend = async () => {
-    if (!input.trim()) return;
-    const text = input;
-    const replyContext = replyMessage ? {
-        id: replyMessage.id,
-        text: replyMessage.text,
-        senderName: replyMessage.senderId === user.uid ? "You" : targetUser.name
-    } : null;
-
-    setInput("");
-    setReplyMessage(null);
-    inputRef.current?.focus(); 
-    
-    const chatId = getChatId(user.uid, targetUserId);
-    updateDoc(doc(db, "chats", chatId), { [`typing.${user.uid}`]: false }).catch(()=>{});
-    await sendMessage(user.uid, targetUserId, text, replyContext);
-  };
-
-  const handleInputChange = async (e) => {
-    setInput(e.target.value);
-    if (!user) return;
-    const chatId = getChatId(user.uid, targetUserId);
-    updateDoc(doc(db, "chats", chatId), { [`typing.${user.uid}`]: true }).catch(()=>{});
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    typingTimeoutRef.current = setTimeout(() => {
-      updateDoc(doc(db, "chats", chatId), { [`typing.${user.uid}`]: false }).catch(()=>{});
-    }, 2000);
-  };
-
-  const handleClearChat = async () => {
-    if(!confirm("Clear chat history?")) return;
-    const chatId = getChatId(user.uid, targetUserId);
-    await clearChatHistory(chatId, user.uid);
-    setIsMenuOpen(false);
-  };
-
-  const handleBlockUser = async () => {
-    if(!confirm(`Block ${targetUser.name}?`)) return;
-    await blockUser(user.uid, targetUserId);
-    setIsMenuOpen(false);
-    router.push("/messages");
-  };
-
-  const handleDeleteMessage = async (msgId, forEveryone) => {
-    const chatId = getChatId(user.uid, targetUserId);
-    await deleteMessage(chatId, msgId, user.uid, forEveryone);
-    closeContextMenu();
-  };
-
-  const handleJumpTo = (msgId) => {
-    const el = document.getElementById(msgId);
-    if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-        el.classList.add("bg-white/5", "transition-colors", "duration-500");
-        setTimeout(() => el.classList.remove("bg-white/5"), 1000);
-    }
-  };
-
-  const visibleMessages = messages.filter(msg => {
-      if (clearedAt && msg.createdAt && msg.createdAt.seconds <= clearedAt.seconds) return false;
-      if (msg.deletedFor?.includes(user?.uid)) return false;
-      return true;
-  });
-
-  if (!targetUser || isInitialLoad) {
-    return <div className="flex flex-col h-full bg-[#0a0a0a] animate-pulse p-4">...</div>;
-  }
+  if (loading) return <div className="h-screen flex items-center justify-center bg-black text-white"><Loader2 className="animate-spin" /></div>;
 
   return (
-    <div className="flex flex-col h-full bg-[#050505] relative overflow-hidden">
-
-      {/* Header */}
-      <div className="flex-shrink-0 p-4 flex items-center justify-between bg-[#0a0a0a]/80 backdrop-blur-xl border-b border-white/5 z-10">
-        <div className="flex items-center gap-4">
-            <Link href="/messages" className="md:hidden p-2 -ml-2 hover:bg-white/10 rounded-full text-gray-400 hover:text-white"><ArrowLeft size={22} /></Link>
-            
-            {/* CLICKABLE PROFILE SECTION */}
-            <Link href={`/profile/${targetUser.uid}`} className="flex items-center gap-4 hover:opacity-80 transition cursor-pointer">
-                <div className="relative w-10 h-10 rounded-full p-[1.5px] bg-gradient-to-tr from-indigo-500 to-purple-500">
-                    <img src={targetUser.dp || "/default-dp.png"} className="w-full h-full rounded-full object-cover bg-black" />
-                </div>
-                <div>
-                    <h2 className="font-bold text-white text-base">{targetUser.name}</h2>
-                    <p className="text-xs text-indigo-400 font-medium">@{targetUser.username}</p>
-                </div>
+    <div className="flex flex-col h-screen bg-black text-white">
+        
+        {/* Header */}
+        <div className="flex items-center gap-4 p-4 border-b border-white/10 bg-black/80 backdrop-blur-md sticky top-0 z-10">
+            <Link href="/messages" className="p-2 -ml-2 hover:bg-white/10 rounded-full transition">
+                <ArrowLeft size={20} />
             </Link>
+            
+            {partner && (
+                <Link href={`/profile/${partner.id}`} className="flex items-center gap-3 flex-1">
+                    <div className="h-10 w-10 rounded-full overflow-hidden bg-gray-800">
+                        <img src={partner.image || "/default-dp.png"} alt={partner.name} className="w-full h-full object-cover" />
+                    </div>
+                    <div>
+                        <h3 className="font-bold text-sm">{partner.name}</h3>
+                        <p className="text-xs text-gray-500">@{partner.username}</p>
+                    </div>
+                </Link>
+            )}
         </div>
-        <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 rounded-full text-gray-400 hover:text-white"><MoreVertical size={20} /></button>
-        <ChatMenu isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} onClearChat={handleClearChat} onBlockUser={handleBlockUser} />
-      </div>
 
-      {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-4 no-scrollbar z-0" ref={scrollRef}>
-        {visibleMessages.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-center opacity-40 select-none"><p className="text-indigo-200 font-medium">No messages here yet</p></div>
-        ) : (
-            visibleMessages.map((msg) => (
-                <MessageBubble 
-                    key={msg.id} 
-                    msg={msg} 
-                    isMe={msg.senderId === user.uid}
-                    onContextMenu={handleContextMenu} 
-                    onJumpTo={handleJumpTo}
-                />
-            ))
-        )}
-        {partnerTyping && <div className="text-xs text-gray-500 pl-4">Typing...</div>}
-      </div>
-
-      {/* Input Area */}
-      <div className="p-4 z-20 relative">
-        {replyMessage && (
-            <div className="mx-2 mb-2 bg-[#1a1a1a] border border-indigo-500/30 rounded-xl p-3 flex items-center justify-between animate-in slide-in-from-bottom-2">
-                <div className="border-l-4 border-indigo-500 pl-3">
-                    <p className="text-xs text-indigo-400 font-bold mb-0.5">Replying to {replyMessage.senderId === user.uid ? "Yourself" : targetUser.name}</p>
-                    <p className="text-sm text-gray-300 line-clamp-1">{replyMessage.text}</p>
+        {/* Chat Area */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {messages.length === 0 && (
+                <div className="text-center text-gray-600 mt-10 text-sm">
+                    No messages yet. Say hi! 👋
                 </div>
-                <button onClick={() => setReplyMessage(null)} className="p-1 hover:bg-white/10 rounded-full text-gray-400"><X size={16} /></button>
+            )}
+            
+            {messages.map((msg) => {
+                const isMe = msg.senderId === user?.uid;
+                return (
+                    <div key={msg._id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+                        <div className={`max-w-[75%] px-4 py-2 rounded-2xl text-sm ${
+                            isMe 
+                            ? "bg-blue-600 text-white rounded-br-none" 
+                            : "bg-[#1f1f1f] text-gray-200 rounded-bl-none"
+                        }`}>
+                            {msg.text}
+                        </div>
+                    </div>
+                );
+            })}
+            <div ref={messagesEndRef} />
+        </div>
+
+        {/* Input Area */}
+        <form onSubmit={handleSend} className="p-4 border-t border-white/10 bg-black">
+            <div className="flex items-center gap-2 bg-[#1f1f1f] rounded-full px-4 py-2 border border-white/10 focus-within:border-blue-500/50 transition">
+                <input 
+                    type="text" 
+                    value={inputText}
+                    onChange={(e) => setInputText(e.target.value)}
+                    placeholder="Message..."
+                    className="flex-1 bg-transparent border-none focus:outline-none text-white placeholder-gray-500 py-1"
+                />
+                <button 
+                    type="submit" 
+                    disabled={!inputText.trim()}
+                    className="p-2 bg-blue-600 text-white rounded-full disabled:opacity-50 disabled:bg-transparent transition"
+                >
+                    <Send size={18} />
+                </button>
             </div>
-        )}
-
-        <div className="bg-[#0a0a0a] border border-white/10 rounded-[24px] p-1.5 flex items-end gap-2 shadow-2xl ring-1 ring-white/5 focus-within:ring-indigo-500/50 transition-all">
-            <textarea 
-                ref={inputRef}
-                value={input}
-                onChange={handleInputChange}
-                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                placeholder="Type a message..."
-                rows={1}
-                className="flex-1 bg-transparent border-none px-4 py-3 text-white placeholder:text-gray-600 focus:outline-none text-[15px] resize-none max-h-32 min-h-[48px] scrollbar-thin"
-                style={{ height: "auto", minHeight: "44px" }}
-            />
-            <button onClick={handleSend} disabled={!input.trim()} className={`mb-1 p-3 rounded-full transition-all duration-300 shadow-lg flex items-center justify-center shrink-0 ${input.trim() ? "bg-indigo-600 text-white hover:bg-indigo-500" : "bg-white/5 text-gray-600 cursor-not-allowed"}`}>
-                {replyMessage ? <CornerDownLeft size={20} /> : <Send size={20} fill={input.trim() ? "currentColor" : "none"} className={input.trim() ? "ml-0.5" : ""} />}
-            </button>
-        </div>
-      </div>
-
-      {/* --- CONTEXT MENU --- */}
-      {contextMenu.visible && contextMenu.msg && (
-        <div 
-          style={{ top: contextMenu.y, left: contextMenu.x }}
-          className="fixed z-50 w-40 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl overflow-hidden animate-scale-in"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button onClick={() => { setReplyMessage(contextMenu.msg); closeContextMenu(); }} className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 flex items-center gap-2">
-            <Reply size={14} /> Reply
-          </button>
-          <button onClick={() => { navigator.clipboard.writeText(contextMenu.msg.text); closeContextMenu(); }} className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 flex items-center gap-2">
-            <Copy size={14} /> Copy
-          </button>
-
-          {contextMenu.msg.senderId === user.uid && !contextMenu.msg.isDeleted && (
-            <>
-              <div className="h-px bg-white/10 my-1" />
-              <button onClick={() => handleDeleteMessage(contextMenu.msg.id, true)} className="w-full text-left px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 flex items-center gap-2">
-                <Trash2 size={14} /> Unsend
-              </button>
-            </>
-          )}
-          <button onClick={() => handleDeleteMessage(contextMenu.msg.id, false)} className="w-full text-left px-4 py-2.5 text-sm text-gray-400 hover:bg-white/5 flex items-center gap-2">
-            <Trash2 size={14} /> Delete for me
-          </button>
-        </div>
-      )}
+        </form>
 
     </div>
   );

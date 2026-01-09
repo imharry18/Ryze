@@ -1,0 +1,47 @@
+// 1. Database Configuration
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL") // Your NeonDB URL
+}
+
+// 2. The User Model (Instagram/Twitter Style)
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  username      String    @unique
+  email         String    @unique
+  password      String?   // Hashed password
+  image         String?   // Profile Picture (DP)
+  bio           String?
+  
+  // College Identity (From your registerSchema)
+  college       String?
+  year          String?
+  branch        String?
+  rollNo        String?
+
+  // System Flags
+  isVerified          Boolean   @default(false) // Blue tick logic
+  isProfileComplete   Boolean   @default(false)
+  
+  // Relationships
+  followers     Follows[] @relation("following")
+  following     Follows[] @relation("follower")
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// 3. The Follows Model (Efficient Many-to-Many)
+model Follows {
+  followerId  String
+  followingId String
+  follower    User   @relation("follower", fields: [followerId], references: [id])
+  following   User   @relation("following", fields: [followingId], references: [id])
+
+  @@id([followerId, followingId]) // Composite ID ensures you can't follow someone twice
+}

@@ -1,70 +1,73 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
 export default function useUpload() {
   const [uploading, setUploading] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [error, setError] = useState(null);
+  const [progress, setProgress] = useState(0); // Fake progress for UX
+  const router = useRouter();
 
-  const upload = async ({ uid, file, mediaType, caption, location, postType, extraData }) => {
+  const upload = async ({ 
+    file, 
+    caption, 
+    location, 
+    postType, 
+    extraData = {} // category, isAnonymous, etc.
+  }) => {
     setUploading(true);
-    setError(null);
-    setProgress(10); // Start visual progress
+    setProgress(10); // Start
 
     try {
       const formData = new FormData();
-      formData.append("userId", uid); // Sending Postgres ID
-      
-      if (file) {
-        formData.append("file", file);
-      }
-      
+      if (file) formData.append("file", file);
       formData.append("caption", caption || "");
       formData.append("location", location || "");
-      formData.append("mediaType", mediaType || "image");
       formData.append("postType", postType || "post");
+      
+      // Append extra data (category, isAnonymous, details)
+      Object.keys(extraData).forEach(key => {
+        formData.append(key, extraData[key]);
+      });
 
-      if (extraData) {
-        formData.append("extraData", JSON.stringify(extraData));
-      }
-
-      // Simulate Progress (Native fetch doesn't support upload progress easily)
-      const interval = setInterval(() => {
-        setProgress((prev) => (prev >= 90 ? 90 : prev + 10));
+      // Simulate Progress (Fetch doesn't support progress events natively easily)
+      const progressInterval = setInterval(() => {
+        setProgress((prev) => (prev < 90 ? prev + 10 : prev));
       }, 500);
 
-      const response = await fetch("/api/posts/create", {
+      const res = await fetch("/api/posts", {
         method: "POST",
         body: formData,
       });
 
-      clearInterval(interval);
+      clearInterval(progressInterval);
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Upload failed");
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Upload failed");
       }
 
       setProgress(100);
-      setUploading(false);
-      return data.post;
+      toast.success("Posted successfully!");
+      router.refresh(); // Refresh feed
+      
+      return { success: true };
 
-    } catch (err) {
-      console.error("Upload Hook Error:", err);
-      setError(err.message);
+    } catch (error) {
+      console.error(error);
+      toast.error(error.message);
+      throw error;
+    } finally {
       setUploading(false);
-      setProgress(0);
-      throw err;
+      setTimeout(() => setProgress(0), 1000); // Reset after delay
     }
   };
 
-  const reset = () => {
-    setUploading(false);
-    setProgress(0);
-    setError(null);
+  return { 
+    upload, 
+    uploading, 
+    progress, 
+    reset: () => { setProgress(0); setUploading(false); } 
   };
-
-  return { upload, uploading, progress, error, reset };
 }

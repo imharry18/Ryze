@@ -5,9 +5,14 @@ import { useSession } from "next-auth/react";
 export function useAuth() {
   const { data: session, status } = useSession();
 
-  return {
-    user: session?.user || null,
-    loading: status === "loading",
-    isAuthenticated: status === "authenticated"
-  };
+  const loading = status === "loading";
+  
+  // Transform NextAuth session to match your old Firebase user object structure
+  // This minimizes changes needed in other components
+  const user = session?.user ? {
+    uid: session.user.id, // Map 'id' to 'uid' for compatibility
+    ...session.user
+  } : null;
+
+  return { user, loading };
 }

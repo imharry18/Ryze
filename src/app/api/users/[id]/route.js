@@ -1,45 +1,37 @@
 import { NextResponse } from "next/server";
-import { pg, mongo } from "@/lib/db";
+import { prisma } from "@/lib/db/prisma";
 
-export async function GET(request, { params }) {
-  const { id } = params;
-
+export async function GET(req, { params }) {
   try {
-    // 1. Fetch User details from PostgreSQL (or using Firebase UID stored in Postgres)
-    let user = await pg.user.findUnique({
-      where: { id: id }, // Try ID first
-    });
+    // Await params before accessing properties
+    const resolvedParams = await params;
+    const { id } = resolvedParams;
 
-    if (!user) {
-      // Fallback: Try finding by firebaseUid (if using legacy links) or username
-      user = await pg.user.findFirst({
-        where: {
-            OR: [
-                { username: id }
-            ]
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        bio: true,
+        image: true,
+        college: true,
+        branch: true,
+        year: true,
+        followers: true, // We will count these in the frontend or use _count here
+        following: true,
+        _count: {
+          select: { followers: true, following: true }
         }
-      });
-    }
+      },
+    });
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // 2. Fetch Posts from MongoDB
-    // Note: In Mongo schema, userId is a String reference to the Postgres ID
-    const posts = await mongo.post.findMany({
-      where: { userId: user.id },
-      orderBy: { createdAt: 'desc' }
-    });
-
-    // 3. Return Combined Data
-    return NextResponse.json({
-      user,
-      posts
-    });
-
+    return NextResponse.json(user);
   } catch (error) {
-    console.error("Profile Fetch Error:", error);
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+    return NextResponse.json({ error: "Fetch failed" }, { status: 500 });
   }
 }
